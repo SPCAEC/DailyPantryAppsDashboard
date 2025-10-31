@@ -1,137 +1,295 @@
-/**
- * SPCA Pet Pantry — Order Metrics
- * --------------------------------
- * Backend for ui-metrics.html
- * Provides search and filter capability by date + status.
- */
+<div class="card">
+  <div class="toolbar" style="justify-content:space-between;align-items:center;flex-wrap:wrap;">
+    <button id="backFromMetrics" class="btn ghost">← Back</button>
+    <h2 style="margin:0;">Form Metrics</h2>
+  </div>
 
-const METRICS_CFG = {
-  SHEET_ID: '1JrfUHDAPMCIvOSknKoN3vVR6KQZTKUaNLpsRru7cekU', // main Pantry Form Responses sheet
-  SHEET_NAME: 'Form Responses 1',
-  TZ: Session.getScriptTimeZone(),
-};
+  <p>Search and filter Pantry Orders using the options below.</p>
 
-/**
- * Called by frontend via google.script.run
- * q = { range, statuses[], start, end }
- */
-function searchOrderMetrics(q) {
-  try {
-    if (!q) throw new Error('Missing query object.');
+  <div class="field-group" style="display:grid;gap:16px;margin-top:10px;">
+    <!-- Quick Date Buttons -->
+    <div class="field">
+      <label><strong>Date:</strong></label><br>
+      <div id="quickDates" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">
+        <button class="quick-btn" data-range="today">Today</button>
+        <button class="quick-btn" data-range="yesterday">Yesterday</button>
+        <button class="quick-btn" data-range="7">Last 7 Days</button>
+        <button class="quick-btn" data-range="30">Last 30 Days</button>
+        <button class="quick-btn" data-range="custom">Custom</button>
+      </div>
+    </div>
 
-    const ss = SpreadsheetApp.openById(METRICS_CFG.SHEET_ID);
-    const sh = ss.getSheetByName(METRICS_CFG.SHEET_NAME);
-    if (!sh) throw new Error('Sheet not found.');
+    <!-- Custom date range -->
+    <div id="customRange" style="display:none;gap:10px;align-items:center;">
+      <input type="date" id="startDate" class="input-lg" />
+      <span>–</span>
+      <input type="date" id="endDate" class="input-lg" />
+    </div>
 
-    const values = sh.getDataRange().getValues();
-    const headers = values.shift();
-    const map = Object.fromEntries(headers.map((h, i) => [h, i]));
+    <!-- Status Dropdown -->
+    <div class="field">
+      <label><strong>Status:</strong></label><br>
+      <div class="dropdown">
+        <button id="statusDropdown" class="btn secondary" type="button">Select Status ▾</button>
+        <div id="statusMenu" class="dropdown-menu">
+          <label><input type="checkbox" value="Any" checked> Any</label>
+          <label><input type="checkbox" value="Not Printed"> Not Printed</label>
+          <label><input type="checkbox" value="In Progress"> In Progress</label>
+          <label><input type="checkbox" value="Filled - Not Notified"> Filled - Not Notified</label>
+          <label><input type="checkbox" value="Awaiting Pick-up"> Awaiting Pick-up</label>
+          <label><input type="checkbox" value="Picked Up"> Picked Up</label>
+          <label><input type="checkbox" value="Expired"> Expired</label>
+          <label><input type="checkbox" value="Restocked"> Restocked</label>
+        </div>
+      </div>
+    </div>
 
-    // --- Define date range ---
-    const today = new Date();
-    const tz = METRICS_CFG.TZ;
+    <div class="actions" style="margin-top:10px;">
+      <button id="btnSearch" class="btn">Search</button>
+      <button id="btnClear" class="btn secondary">Clear</button>
+    </div>
+  </div>
 
-    let start, end;
-    switch (q.range) {
-      case 'today':
-        start = new Date(today); start.setHours(0,0,0,0);
-        end = new Date(today); end.setHours(23,59,59,999);
-        break;
-      case 'yesterday':
-        start = new Date(today); start.setDate(today.getDate() - 1); start.setHours(0,0,0,0);
-        end = new Date(today); end.setDate(today.getDate() - 1); end.setHours(23,59,59,999);
-        break;
-      case '7':
-        start = new Date(today); start.setDate(today.getDate() - 7); start.setHours(0,0,0,0);
-        end = new Date(today); end.setHours(23,59,59,999);
-        break;
-      case '30':
-        start = new Date(today); start.setDate(today.getDate() - 30); start.setHours(0,0,0,0);
-        end = new Date(today); end.setHours(23,59,59,999);
-        break;
-      case 'custom':
-        start = q.start ? new Date(q.start) : null;
-        end = q.end ? new Date(q.end) : null;
-        if (!start || !end) throw new Error('Invalid custom date range.');
-        end.setHours(23,59,59,999);
-        break;
-      default:
-        throw new Error('Date range is required.');
-    }
+  <div id="msg" class="msg" style="display:none;margin-top:12px;"></div>
+  <div id="resultsContainer" style="display:none;margin-top:20px;"></div>
+</div>
 
-    // --- Status filter ---
-    const statuses = Array.isArray(q.statuses) && q.statuses.length ? q.statuses : ['Any'];
-    const results = [];
-
-    for (let r of values) {
-      const ts = parseDateSafe_(r[map['Timestamp']]);
-      if (!ts || ts < start || ts > end) continue;
-
-      const row = {
-        formId: String(r[map['FormID']] || ''),
-        printed: safeStr(r[map['Printed At']]),
-        fulfilled: safeStr(r[map['Fulfilled Date']] || r[map['Fulfilled At']]),
-        notified: safeStr(r[map['Notification Status']]),
-        pickedUp: safeStr(r[map['Picked-Up']]),
-        restocked: safeStr(r[map['Restocked']]),
-        requestDate: Utilities.formatDate(ts, tz, 'yyyy-MM-dd'),
-        clientName: `${safeStr(r[map['First Name']])} ${safeStr(r[map['Last Name']])}`.trim(),
-        phone: safeStr(r[map['Phone Number']]),
-      };
-
-      row.status = computeStatus_(r, map, ts);
-
-      // Apply filters
-      if (statuses.includes('Any') || statuses.includes(row.status)) {
-        results.push(row);
-      }
-    }
-
-    Logger.log(`✅ searchOrderMetrics found ${results.length} rows.`);
-    // Return plain JSON-safe object — not a ContentService output
-    return { ok: true, rows: results };
-
-  } catch (err) {
-    Logger.log(`❌ searchOrderMetrics failed: ${err}`);
-    return { ok: false, message: String(err) };
+<style>
+  .input-lg {
+    padding:10px 12px;
+    border-radius:10px;
+    border:1px solid #cbd5e1;
+    font-size:16px;
+    flex:1;
+    min-width:160px;
   }
-}
+  .quick-btn {
+    background:#e2e8f0;
+    color:#0f172a;
+    border:none;
+    border-radius:8px;
+    padding:8px 14px;
+    cursor:pointer;
+    font-weight:600;
+    transition:all .15s ease;
+  }
+  .quick-btn:hover { background:var(--accent); color:#fff; }
+  .quick-btn.active { background:var(--accent); color:#fff; box-shadow:0 0 0 2px #0ea5e966 inset; }
 
-/* ---------- Helpers ---------- */
+  .dropdown { position:relative; display:inline-block; }
+  .dropdown-menu {
+    display:none;
+    position:absolute;
+    background:#fff;
+    border:1px solid #cbd5e1;
+    border-radius:10px;
+    padding:10px;
+    box-shadow:0 4px 14px rgba(0,0,0,0.1);
+    z-index:10;
+  }
+  .dropdown-menu label {
+    display:block;
+    padding:4px 6px;
+    font-size:16px;
+    cursor:pointer;
+  }
+  .dropdown-menu input { margin-right:6px; }
+  .dropdown.show .dropdown-menu { display:block; }
 
-function computeStatus_(r, map, ts) {
-  const gen = r[map['Generated At']] || '';
-  const printed = r[map['Printed At']] || '';
-  const fulfilled = r[map['Fulfilled Date']] || r[map['Fulfilled At']] || '';
-  const notified = r[map['Notification Status']] || '';
-  const picked = r[map['Picked-Up']] || '';
-  const restocked = r[map['Restocked']] || '';
+  .spinner {
+    width:22px;height:22px;
+    border-radius:50%;
+    border:3px solid #e2e8f0;
+    border-top-color:var(--accent,#0ea5e9);
+    animation:spin 1s linear infinite;
+    display:inline-block;
+    vertical-align:middle;
+    margin-right:8px;
+  }
+  @keyframes spin {to{transform:rotate(360deg)}}
 
-  const now = new Date();
-  const tenDaysAgo = new Date(now);
-  tenDaysAgo.setDate(now.getDate() - 10);
+  .print-btn {
+    margin-top:16px;
+    padding:10px 16px;
+    background:var(--accent);
+    color:#fff;
+    border:none;
+    border-radius:10px;
+    cursor:pointer;
+    font-weight:600;
+  }
+  .print-btn:hover { background:var(--accent-hover); }
+</style>
 
-  if (restocked) return 'Restocked';
-  if (picked) return 'Picked Up';
-  if (fulfilled && !notified) return 'Filled - Not Notified';
-  if (fulfilled && !picked && notified === 'Notified') return 'Awaiting Pick-up';
-  if (fulfilled && notified && picked) return 'Picked Up';
-  if (gen && printed && !fulfilled) return 'In Progress';
-  if (gen && !printed) return 'Not Printed';
-  if (!picked && ts < tenDaysAgo) return 'Expired';
-  return 'Unknown';
-}
+<script>
+(function(){
+  const $ = s => document.querySelector(s);
+  const $$ = s => [...document.querySelectorAll(s)];
+  const quickBtns = $$('#quickDates .quick-btn');
+  const customRange = $('#customRange');
+  const dropdown = $('.dropdown');
+  const dropdownBtn = $('#statusDropdown');
+  const msg = $('#msg');
+  const results = $('#resultsContainer');
+  let lastRows = [];
 
-function parseDateSafe_(v) {
-  try {
-    if (v instanceof Date && !isNaN(v)) return v;
-    const s = String(v || '').trim();
-    if (!s) return null;
-    const d = new Date(s);
-    return isNaN(d) ? null : d;
-  } catch (_) { return null; }
-}
+  /* ===== Quick date logic ===== */
+  quickBtns.forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      quickBtns.forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      const val = btn.dataset.range;
+      customRange.style.display = (val==='custom') ? 'flex' : 'none';
+    });
+  });
 
-function safeStr(v) {
-  return v == null ? '' : String(v).trim();
-}
+  /* ===== Dropdown logic ===== */
+  dropdownBtn.addEventListener('click',()=> dropdown.classList.toggle('show'));
+  document.addEventListener('click',e=>{
+    if(!dropdown.contains(e.target)) dropdown.classList.remove('show');
+  });
+
+  function getSelectedStatuses(){
+    return $$('#statusMenu input:checked').map(cb=>cb.value);
+  }
+
+  /* ===== Search ===== */
+  $('#btnSearch').addEventListener('click',()=>{
+    const range = $('.quick-btn.active')?.dataset.range || '';
+    const statuses = getSelectedStatuses();
+    if(!range){ setMsg('Please choose a date range first.','error'); return; }
+
+    setBusy(true, `Searching for ${statuses.join(', ')} in range ${range}…`);
+
+    const q = {
+      range,
+      statuses,
+      start: $('#startDate').value || '',
+      end: $('#endDate').value || ''
+    };
+
+    google.script.run
+      .withSuccessHandler(res => {
+        setBusy(false);
+        if (!res || !res.ok) { setMsg(res?.message || 'Search failed.','error'); return; }
+        const rows = Array.isArray(res.rows) ? res.rows : [];
+        if (!rows.length) { setMsg('No results found.','error'); results.style.display='none'; return; }
+        lastRows = rows;
+        renderResults(rows);
+      })
+      .withFailureHandler(err => {
+        setBusy(false);
+        setMsg('Search failed: ' + err.message,'error');
+      })
+      .searchOrderMetrics(q);
+  });
+
+  /* ===== Render Results ===== */
+  function renderResults(rows){
+    const html = `
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr style="background:#eaf2f8;">
+            <th>Status</th><th>Date of Request</th><th>Form ID</th>
+            <th>Client Name</th><th>Phone</th>
+            <th>Printed</th><th>Fulfilled</th><th>Notified</th>
+            <th>Picked Up</th><th>Restocked</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows.map((r,i)=>`
+            <tr style="background:${i%2?'#f8fafc':'#fff'};">
+              <td>${r.status||''}</td>
+              <td>${r.requestDate||''}</td>
+              <td>${r.formId||''}</td>
+              <td>${r.clientName||''}</td>
+              <td>${r.phone||''}</td>
+              <td>${r.printed||''}</td>
+              <td>${r.fulfilled||''}</td>
+              <td>${r.notified||''}</td>
+              <td>${r.pickedUp||''}</td>
+              <td>${r.restocked||''}</td>
+            </tr>`).join('')}
+        </tbody>
+      </table>
+      <button id="btnPrintResults" class="print-btn">🖨️ Print Results</button>
+    `;
+    results.innerHTML = html;
+    results.style.display='block';
+    setMsg(`${rows.length} result${rows.length>1?'s':''} found.`,'success');
+    $('#btnPrintResults').addEventListener('click',()=>printResults(rows));
+  }
+
+  /* ===== Print ===== */
+  function printResults(rows){
+    const printable = `
+      <!DOCTYPE html>
+      <html><head>
+        <meta charset="utf-8">
+        <title>Form Metrics Report</title>
+        <style>
+          body{font-family:system-ui,sans-serif;padding:24px;}
+          h2{margin-top:0;text-align:center;}
+          table{width:100%;border-collapse:collapse;}
+          th,td{border:1px solid #ccc;padding:6px 8px;font-size:14px;}
+          th{background:#f0f4f8;}
+          tr:nth-child(even){background:#fafafa;}
+        </style>
+      </head>
+      <body>
+        <h2>SPCA Pet Pantry — Form Metrics Report</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Status</th><th>Date of Request</th><th>Form ID</th>
+              <th>Client Name</th><th>Phone</th>
+              <th>Printed</th><th>Fulfilled</th><th>Notified</th>
+              <th>Picked Up</th><th>Restocked</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(r=>`
+              <tr>
+                <td>${r.status||''}</td>
+                <td>${r.requestDate||''}</td>
+                <td>${r.formId||''}</td>
+                <td>${r.clientName||''}</td>
+                <td>${r.phone||''}</td>
+                <td>${r.printed||''}</td>
+                <td>${r.fulfilled||''}</td>
+                <td>${r.notified||''}</td>
+                <td>${r.pickedUp||''}</td>
+                <td>${r.restocked||''}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+        <script>window.onload=()=>window.print();<\/script>
+      </body></html>`;
+    const w = window.open('', '_blank');
+    w.document.write(printable);
+    w.document.close();
+  }
+
+  /* ===== Clear ===== */
+  $('#btnClear').addEventListener('click',()=>{
+    quickBtns.forEach(b=>b.classList.remove('active'));
+    $$('#statusMenu input').forEach(cb=>cb.checked=false);
+    $('#startDate').value=''; $('#endDate').value='';
+    customRange.style.display='none';
+    results.style.display='none';
+    setMsg('','');
+  });
+
+  $('#backFromMetrics').addEventListener('click',()=> showScreen('home'));
+
+  /* ===== Helpers ===== */
+  function setBusy(busy,text){
+    if(busy){ setMsg(`<span class="spinner"></span>${text||'Working…'}`,'info'); }
+    else { msg.innerHTML=''; msg.style.display='none'; }
+  }
+  function setMsg(html,type){
+    msg.innerHTML=html||''; msg.className='msg '+(type||'');
+    msg.style.display=html?'block':'none';
+  }
+})();
+</script>
