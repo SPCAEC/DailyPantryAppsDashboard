@@ -1,0 +1,101 @@
+<!-- SPCA Pet Pantry — Dynamic UI Loader -->
+<style>
+  .loader-container {
+    display: grid;
+    place-items: center;
+    min-height: 200px;
+    text-align: center;
+    color: var(--text, #0f172a);
+  }
+  .spinner {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 3px solid #e2e8f0;
+    border-top-color: var(--accent, #0ea5e9);
+    animation: spin 1s linear infinite;
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 10px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+
+<script>
+/**
+ * Loads and swaps in external UI screens (e.g., ui-recreate.html, ui-reprint.html)
+ * into the given container element dynamically.
+ */
+async function loadUIPanel(fileName, containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) {
+    console.error('Missing container:', containerId);
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="loader-container" aria-busy="true" role="status">
+      <span class="spinner"></span> Loading ${escapeHtml(fileName.replace(/ui-|\.html/g, ''))}…
+    </div>
+  `;
+
+  try {
+    google.script.run
+      .withSuccessHandler(html => {
+        if (!html) {
+          container.innerHTML = `<div class="msg error">Failed to load ${escapeHtml(fileName)}.</div>`;
+          return;
+        }
+        container.innerHTML = html;
+        executeInlineScriptsScoped(container);
+      })
+      .withFailureHandler(err => {
+        console.error('UI load error:', err);
+        container.innerHTML = `
+          <div class="msg error">
+            Server error loading ${escapeHtml(fileName)}.<br>
+            <button class="btn secondary" onclick="loadUIPanel('${fileName}', '${containerId}')">Retry</button>
+          </div>`;
+      })
+      .loadUIFile(fileName);
+  } catch (err) {
+    console.error('loadUIPanel failed:', err);
+    container.innerHTML = `<div class="msg error">${escapeHtml(err.message || err)}</div>`;
+  }
+}
+
+/**
+ * Executes inline scripts scoped within the loaded container only.
+ */
+function executeInlineScriptsScoped(container) {
+  const scripts = container.querySelectorAll('script');
+  scripts.forEach(oldScript => {
+    const newScript = document.createElement('script');
+    if (oldScript.src) newScript.src = oldScript.src;
+    else newScript.textContent = oldScript.textContent;
+    container.appendChild(newScript);
+    oldScript.remove();
+  });
+}
+
+/**
+ * Backend helper defined in Code.gs to serve partial HTML fragments.
+ */
+function loadUIFile(fileName) {
+  try {
+    return HtmlService.createHtmlOutputFromFile(fileName).getContent();
+  } catch (e) {
+    Logger.log('loadUIFile failed: %s', e);
+    return `<div class="msg error">Error loading UI: ${escapeHtml(e)}</div>`;
+  }
+}
+
+/**
+ * Simple HTML escape
+ */
+function escapeHtml(s) {
+  const div = document.createElement('div');
+  div.innerText = String(s);
+  return div.innerHTML;
+}
+</script>

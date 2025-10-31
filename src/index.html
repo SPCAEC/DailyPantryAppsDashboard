@@ -1,0 +1,314 @@
+<!-- SPCA Pet Pantry • Daily Pantry Apps Dashboard -->
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <title>Daily Pantry Apps Dashboard</title>
+  <style>
+    :root {
+      --bg:#f6f8fc; --card:#fff; --text:#0f172a; --muted:#64748b;
+      --accent:#0ea5e9; --accent-hover:#0284c7; --success:#16a34a; --error:#dc2626;
+      --radius:18px; --shadow:0 10px 28px rgba(2,8,23,.10);
+    }
+    html,body{height:100%}
+    body{
+      margin:0;
+      font:18px system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+      color:var(--text);
+      background:var(--bg);
+      display:grid;
+      place-items:center;
+    }
+    .app{
+      width:min(1100px,94vw);
+      background:var(--card);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      padding:34px;
+      display:grid;
+      gap:22px;
+    }
+    h1{margin:0 0 8px;font-weight:800;font-size:28px}
+    .muted{color:var(--muted)}
+
+    .btn{
+      appearance:none;
+      border:0;
+      padding:14px 18px;
+      border-radius:14px;
+      cursor:pointer;
+      background:var(--accent);
+      color:#fff;
+      font-weight:700;
+      box-shadow:var(--shadow);
+      transition:transform .06s ease,background .2s ease;
+      user-select:none;
+      font-size:18px;
+    }
+    .btn:hover{background:var(--accent-hover);transform:translateY(-1px)}
+    .btn.secondary{background:#e2e8f0;color:#0f172a}
+    .btn.ghost{background:transparent;color:var(--accent);box-shadow:none}
+    .btn:disabled{opacity:.6;cursor:not-allowed;transform:none}
+
+    .card{background:#f1f5f9;border-radius:14px;padding:16px}
+    .grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+    .tile{border:1px solid #e2e8f0;background:#fff;border-radius:16px;padding:18px;display:grid;gap:10px}
+    .tile h2{margin:0;font-size:22px}
+    .tile p{margin:0;color:var(--muted);font-size:16px}
+
+    .list{max-height:340px;overflow:auto;margin:0;padding:0;list-style:none}
+    .list li{padding:10px 12px;border-bottom:1px solid #e2e8f0;display:flex;gap:12px;align-items:center}
+
+    .badge{font-size:13px;color:#fff;background:var(--muted);border-radius:999px;padding:4px 10px}
+    .msg{padding:12px;border-radius:12px;font-size:16px}
+    .msg.success{background:#ecfdf5;color:#065f46}
+    .msg.error{background:#fef2f2;color:#991b1b}
+
+    .toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .spinner{width:26px;height:26px;border-radius:50%;border:3px solid #e2e8f0;border-top-color:var(--accent);animation:spin 1s linear infinite;display:inline-block;vertical-align:middle}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* Screens */
+    .screen{display:none}
+    .screen.show{display:block;animation:fadeIn .2s ease}
+    @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>Pet Pantry — Daily Apps</h1>
+    <div id="status" class="muted">Choose an action below to get started.</div>
+
+    <!-- HOME (Tiles) -->
+    <div id="homePanel" class="screen show">
+      <div class="grid-4">
+        <div class="tile">
+          <h2>Grab New Forms</h2>
+          <p>Find newly generated PDFs in Completed and prepare them for printing.</p>
+          <div class="toolbar"><button id="homeGrabBtn" class="btn">Open</button></div>
+        </div>
+        <div class="tile">
+          <h2>Recreate Forms</h2>
+          <p>Regenerate PDFs from responses by date or row range. New files appear in Completed.</p>
+          <div class="toolbar"><button id="homeRecreateBtn" class="btn">Open</button></div>
+        </div>
+        <div class="tile">
+          <h2>Reprint Forms</h2>
+          <p>Search the Archive by name or date, select files, and print a merged PDF.</p>
+          <div class="toolbar"><button id="homeReprintBtn" class="btn">Open</button></div>
+        </div>
+        <div class="tile">
+          <h2>Form Metrics</h2>
+          <p>Use to view the current status of Pantry Orders.</p>
+          <div class="toolbar">
+            <button id="homeMetricsBtn" class="btn">Open</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- GRAB NEW FORMS (built-in on this page) -->
+    <div id="grabPanel" class="screen">
+      <div class="toolbar" style="justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;">
+        <button id="backFromGrab" class="btn ghost">← Back</button>
+        <div class="muted">Loads new PDFs and lets you print & archive them in one go.</div>
+      </div>
+      <div id="progress" class="muted"></div>
+
+      <div id="summary" class="card" style="display:none;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <strong>New forms</strong>
+          <span id="countBadge" class="badge">0</span>
+        </div>
+        <ul id="fileList" class="list"></ul>
+      </div>
+
+      <div class="toolbar" style="justify-content:flex-end;">
+        <button id="printBtn" class="btn secondary" style="display:none;">Print & Archive</button>
+      </div>
+    </div>
+
+    <!-- Dynamic Panels (loaded via ui-loader) -->
+    <div id="recreatePanel" class="screen"></div>
+    <div id="reprintPanel" class="screen"></div>
+    <div id="dynamicPanel" class="screen"></div>
+
+    <div id="result"></div>
+  </div>
+
+  <script>
+    // Panels
+    const homePanel     = document.getElementById('homePanel');
+    const grabPanel     = document.getElementById('grabPanel');
+    const recreatePanel = document.getElementById('recreatePanel');
+    const reprintPanel  = document.getElementById('reprintPanel');
+    const dynamicPanel  = document.getElementById('dynamicPanel');
+    const statusEl      = document.getElementById('status');
+    const progressEl    = document.getElementById('progress');
+    const resultEl      = document.getElementById('result');
+
+    function showScreen(which){
+      [homePanel, grabPanel, recreatePanel, reprintPanel, dynamicPanel].forEach(p => p.classList.remove('show'));
+      document.querySelectorAll('#progress,#result').forEach(el => el.innerHTML = '');
+      switch(which){
+        case 'home':     homePanel.classList.add('show'); break;
+        case 'grab':     grabPanel.classList.add('show'); break;
+        case 'recreate': recreatePanel.classList.add('show'); break;
+        case 'reprint':  reprintPanel.classList.add('show'); break;
+        case 'dynamic':  dynamicPanel.classList.add('show'); break;
+      }
+    }
+
+    // Home buttons (single, consistent wiring)
+    document.getElementById('homeGrabBtn').onclick = () => { showScreen('grab'); startGrab(); };
+    document.getElementById('backFromGrab').onclick = () => { resetGrabUI(); showScreen('home'); };
+
+    document.getElementById('homeRecreateBtn').onclick = () => {
+      loadUIPanel('ui-recreate.html', 'recreatePanel');
+      showScreen('recreate');
+    };
+    document.getElementById('homeReprintBtn').onclick = () => {
+      loadUIPanel('ui-reprint.html', 'reprintPanel');
+      showScreen('reprint');
+    };
+    document.getElementById('homeMetricsBtn').onclick = () => {
+      loadUIPanel('ui-metrics.html', 'dynamicPanel');
+      showScreen('dynamic');
+    };
+
+    // Shared busy indicator
+    function setBusyTarget(targetEl, busy, text){
+      if (targetEl) targetEl.innerHTML = busy ? `<span class="spinner"></span> <span>${escapeHtml(text||'Working…')}</span>` : '';
+      const disabled = !!busy;
+      document.querySelectorAll('.btn').forEach(b => {
+        if (b.dataset.noLock!=="1") b.disabled = disabled;
+      });
+    }
+
+    // ==== Grab Logic ====
+    const summaryEl  = document.getElementById('summary');
+    const countBadge = document.getElementById('countBadge');
+    const fileListEl = document.getElementById('fileList');
+    const printBtn   = document.getElementById('printBtn');
+    let currentFiles = [];
+
+    function startGrab(){
+      setBusyTarget(progressEl, true, 'Looking for new PDFs…');
+      google.script.run
+        .withSuccessHandler(res => {
+          setBusyTarget(progressEl,false);
+          if (!res || !res.ok) { showError('Could not list forms.'); return; }
+          currentFiles = res.files || [];
+          renderGrabList(currentFiles);
+          statusEl.textContent = currentFiles.length
+            ? 'Review the list, then click “Print & Archive”.'
+            : 'No new forms in Completed. You’re all set.';
+          printBtn.style.display = currentFiles.length ? 'inline-block' : 'none';
+          printBtn.disabled = currentFiles.length === 0;
+        })
+        .withFailureHandler(err => {
+          setBusyTarget(progressEl,false);
+          showError('Server error while listing forms.');
+          console.error(err);
+        })
+        .listNewForms();
+    }
+
+    function renderGrabList(files){
+      summaryEl.style.display = 'block';
+      countBadge.textContent = files.length;
+      fileListEl.innerHTML = '';
+      if (!files.length) {
+        fileListEl.innerHTML = '<li class="muted">Nothing new found.</li>';
+        return;
+      }
+      for (const f of files) {
+        const li = document.createElement('li');
+        li.innerHTML = `<span>${escapeHtml(f.name)}</span><span class="muted" style="margin-left:auto;">${escapeHtml(f.created)}</span>`;
+        fileListEl.appendChild(li);
+      }
+    }
+
+    printBtn.addEventListener('click', () => {
+      if (!currentFiles.length) return;
+      printBtn.disabled = true;
+      setBusyTarget(progressEl,true,'Merging PDFs and archiving originals…');
+      const ids = currentFiles.map(f => f.id);
+      google.script.run
+        .withSuccessHandler(res => {
+          if (!res || !res.ok) {
+            setBusyTarget(progressEl,false);
+            showError(res && res.message ? res.message : 'Merge failed.');
+            printBtn.disabled = false;
+            return;
+          }
+          try {
+            openPrintableBase64(res.base64);
+            setBusyTarget(progressEl,false);
+            showSuccess(`Ready to print ${currentFiles.length} forms. Archived ${res.archivedIds?.length || 0}.`);
+            currentFiles = [];
+            renderGrabList(currentFiles);
+            printBtn.style.display = 'none';
+          } catch (e) {
+            setBusyTarget(progressEl,false);
+            showError('Could not open merged PDF for printing.');
+            console.error(e);
+            printBtn.disabled = false;
+          }
+        })
+        .withFailureHandler(err => {
+          setBusyTarget(progressEl,false);
+          showError('Server error during merge/archiving.');
+          console.error(err);
+          printBtn.disabled = false;
+        })
+        .getMergedPdfAndArchive(ids);
+    });
+
+    function resetGrabUI(){
+      currentFiles = [];
+      renderGrabList(currentFiles);
+      printBtn.style.display = 'none';
+      progressEl.innerHTML = '';
+      resultEl.innerHTML = '';
+    }
+
+    // Shared helpers
+    function showError(msg){ resultEl.innerHTML = `<div class="msg error">${escapeHtml(msg)}</div>`; }
+    function showSuccess(msg){ resultEl.innerHTML = `<div class="msg success">${escapeHtml(msg)}</div>`; }
+    function escapeHtml(s){
+      const div = document.createElement('div');
+      div.innerText = String(s);
+      return div.innerHTML;
+    }
+
+    function openPrintableBase64(b64){
+      if (!b64 || typeof b64 !== 'string') throw new Error('Empty PDF payload');
+      if (!b64.startsWith('JVBERi0')) throw new Error('Server did not return a PDF.');
+      const dataUrl = 'data:application/pdf;base64,' + b64;
+      const w = window.open('', '_blank');
+      w.document.write(`
+        <!doctype html><html><head><meta charset="utf-8"><title>Print — Pet Pantry</title></head>
+        <body style="margin:0;background:#111;color:#fff;">
+          <div style="position:fixed;top:8px;left:8px;font:12px system-ui;opacity:.8">Merged PDF ready. If print dialog doesn’t appear, use the download link below.</div>
+          <a id="dl" download="Pantry_Forms.pdf" style="position:fixed;top:8px;right:8px;color:#fff;">Download</a>
+          <iframe id="pdf" style="border:0;width:100vw;height:100vh"></iframe>
+          <script>
+            const dataUrl = ${JSON.stringify(dataUrl)};
+            const f = document.getElementById('pdf');
+            const a = document.getElementById('dl');
+            a.href = dataUrl;
+            f.src = dataUrl;
+            f.onload = () => { setTimeout(() => { try { f.contentWindow.print(); } catch(_) {} }, 400); };
+          <\/script>
+        </body></html>
+      `);
+      w.document.close();
+    }
+  </script>
+
+  <!-- Shared dynamic loader utilities -->
+  <?!= HtmlService.createHtmlOutputFromFile('ui-loader').getContent(); ?>
+</body>
+</html>

@@ -1,0 +1,213 @@
+<div class="card">
+  <div class="toolbar" style="justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+    <button id="backFromReprint" class="btn ghost">← Back</button>
+    <h2 style="margin:0;">Reprint Forms</h2>
+  </div>
+
+  <p>Search archived Pantry forms by date or client name. Selected forms will open as one merged PDF for printing — no files are saved or moved.</p>
+
+  <!-- Search controls -->
+  <div class="row" style="display:grid;gap:16px;margin-bottom:14px;">
+    <div class="field" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+      <label style="min-width:120px;">Date range</label>
+      <input type="date" id="startDate" class="input-lg" />
+      <span>–</span>
+      <input type="date" id="endDate" class="input-lg" />
+    </div>
+
+    <div class="field" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+      <label style="min-width:120px;">Client name</label>
+      <input type="text" id="firstName" class="input-lg" placeholder="First name" />
+      <input type="text" id="lastName" class="input-lg" placeholder="Last name" />
+    </div>
+
+    <div class="actions" style="margin-top:10px;">
+      <button class="btn" id="btnSearchArchive">Search Archive</button>
+      <button class="btn secondary" id="btnClear">Clear</button>
+    </div>
+  </div>
+
+  <!-- Message -->
+  <div id="msg" class="msg" style="display:none;"></div>
+
+  <!-- Results -->
+  <div id="resultsContainer" style="margin-top:1rem; display:none;">
+    <div class="actions" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <label style="display:flex;align-items:center;gap:6px;">
+        <input type="checkbox" id="selectAll" style="transform:scale(1.4);" /> Select All
+      </label>
+      <button class="btn" id="btnReprint">Reprint Selected</button>
+    </div>
+
+    <table class="data" style="width:100%;border-collapse:collapse;">
+      <thead>
+        <tr style="background:#eaf2f8;text-align:left;">
+          <th style="width:50px;"></th>
+          <th>Received Date</th>
+          <th>Client Name</th>
+          <th>Generated At</th>
+          <th>Form ID</th>
+        </tr>
+      </thead>
+      <tbody id="resultsBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<style>
+  .input-lg {
+    padding:10px 12px;
+    border-radius:10px;
+    border:1px solid #cbd5e1;
+    font-size:16px;
+    flex:1;
+    min-width:160px;
+  }
+  .input-lg:focus {
+    outline:none;
+    box-shadow:0 0 0 2px var(--accent,#0ea5e9);
+  }
+  .spinner {
+    width:22px;height:22px;
+    border-radius:50%;
+    border:3px solid #e2e8f0;
+    border-top-color:var(--accent,#0ea5e9);
+    animation:spin 1s linear infinite;
+    display:inline-block;
+    vertical-align:middle;
+    margin-right:8px;
+  }
+  @keyframes spin {to{transform:rotate(360deg)}}
+</style>
+
+<script>
+(function(){
+  const $  = sel => document.querySelector(sel);
+  const $$ = sel => [...document.querySelectorAll(sel)];
+  const msg = $('#msg');
+  const resultsContainer = $('#resultsContainer');
+  const resultsBody = $('#resultsBody');
+  const btnSearch = $('#btnSearchArchive');
+  const btnReprint = $('#btnReprint');
+  const selectAll = $('#selectAll');
+
+  /* ===== Utility ===== */
+  function setMsg(html, type){
+    msg.innerHTML = html || '';
+    msg.className = 'msg ' + (type || '');
+    msg.style.display = html ? 'block' : 'none';
+  }
+
+  function setBusy(target, busy, text){
+    if(busy){
+      target.disabled = true;
+      setMsg(`<span class="spinner"></span>${text || 'Working…'}`, '');
+    } else {
+      target.disabled = false;
+    }
+  }
+
+  function clearResults(){
+    resultsBody.innerHTML = '';
+    resultsContainer.style.display = 'none';
+    selectAll.checked = false;
+    setMsg('', '');
+  }
+
+  /* ===== Clear ===== */
+  $('#btnClear').addEventListener('click', () => {
+    ['#startDate','#endDate','#firstName','#lastName'].forEach(id => $(id).value='');
+    clearResults();
+  });
+
+  /* ===== Back Button ===== */
+  $('#backFromReprint').addEventListener('click', ()=> showScreen('home'));
+
+  /* ===== Search ===== */
+  $('#btnSearchArchive').addEventListener('click', () => {
+    const q = {
+      start: $('#startDate').value,
+      end: $('#endDate').value,
+      first: $('#firstName').value.trim(),
+      last: $('#lastName').value.trim()
+    };
+
+    if(!q.start && !q.end && !q.first && !q.last){
+      setMsg('Enter a date range or name to search.', 'error');
+      return;
+    }
+
+    clearResults();
+    setBusy(btnSearch, true, 'Searching archive…');
+
+    google.script.run
+      .withSuccessHandler(res => {
+        setBusy(btnSearch, false);
+        renderResults(res);
+      })
+      .withFailureHandler(err => {
+        setBusy(btnSearch, false);
+        setMsg('Search failed: ' + err.message, 'error');
+      })
+      .searchFormsForRecreate(q); // same backend search function
+  });
+
+  /* ===== Render ===== */
+  function renderResults(res){
+    if(!res || !res.ok){ setMsg(res?.message || 'No results','error'); return; }
+    const rows = res.rows || [];
+    if(!rows.length){ setMsg('No matches found','error'); return; }
+
+    selectAll.checked = false;
+    resultsBody.innerHTML = rows.map(r => `
+      <tr style="border-bottom:1px solid #e2e8f0;">
+        <td><input type="checkbox" class="chk" data-id="${escapeHtml(r.formId)}" style="transform:scale(1.4);" /></td>
+        <td>${escapeHtml(r.timestamp||'')}</td>
+        <td>${escapeHtml(r.name||'')}</td>
+        <td>${escapeHtml(r.generatedAt||'')}</td>
+        <td>${escapeHtml(r.formId||'')}</td>
+      </tr>`).join('');
+
+    resultsContainer.style.display = 'block';
+    setMsg(`${rows.length} archived form${rows.length>1?'s':''} found.`, 'success');
+  }
+
+  /* ===== Select All ===== */
+  selectAll.addEventListener('change', e => {
+    $$('.chk').forEach(c => c.checked = e.target.checked);
+  });
+
+  /* ===== Reprint Selected ===== */
+  $('#btnReprint').addEventListener('click', () => {
+    const ids = $$('.chk:checked').map(c => c.dataset.id);
+    if(!ids.length){
+      setMsg('Select at least one form to reprint.', 'error');
+      return;
+    }
+
+    setBusy(btnReprint, true, `Merging ${ids.length} form${ids.length>1?'s':''}…`);
+
+    google.script.run
+      .withSuccessHandler(res => {
+        setBusy(btnReprint, false);
+        if(res.ok && res.url){
+          setMsg(`✅ Merged PDF ready. Opening now…`, 'success');
+          window.open(res.url, '_blank');
+        } else {
+          setMsg(res.message || 'Reprint failed.', 'error');
+        }
+      })
+      .withFailureHandler(err => {
+        setBusy(btnReprint, false);
+        setMsg('Reprint error: ' + err.message, 'error');
+      })
+      .getMergedPdfFromArchive(ids);
+  });
+
+  function escapeHtml(s){
+    const div=document.createElement('div');
+    div.innerText=String(s);
+    return div.innerHTML;
+  }
+})();
+</script>

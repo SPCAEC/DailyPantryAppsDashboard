@@ -1,0 +1,279 @@
+<div class="card">
+  <div class="toolbar" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+    <button id="backFromRecreate" class="btn ghost">← Back</button>
+    <h2 style="margin:0;">Recreate Forms</h2>
+  </div>
+
+  <p>Search for already-generated forms to rebuild with the latest template. Only rows with a “Generated At” value are included.</p>
+
+  <!-- Search controls -->
+  <div class="row" style="display:grid;gap:18px;margin-bottom:14px;">
+    <div class="field" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;">
+      <label style="min-width:120px;">Date range</label>
+      <input type="date" id="startDate" class="input-lg" />
+      <span>–</span>
+      <input type="date" id="endDate" class="input-lg" />
+    </div>
+
+    <div class="field" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;">
+      <label style="min-width:120px;">Client name</label>
+      <input type="text" id="firstName" class="input-lg" placeholder="First name" />
+      <input type="text" id="lastName" class="input-lg" placeholder="Last name" />
+    </div>
+
+    <div class="field" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center;">
+      <label style="min-width:120px;">Form ID</label>
+      <input type="text" id="formId" class="input-lg" placeholder="Exact Form ID" />
+    </div>
+
+    <div class="actions" style="margin-top:10px;">
+      <button class="btn" id="btnSearch">Search</button>
+      <button class="btn secondary" id="btnClear">Clear</button>
+    </div>
+  </div>
+
+  <!-- Progress / message -->
+  <div id="msg" class="msg" style="display:none;margin-bottom:10px;"></div>
+
+  <!-- Results -->
+  <div id="resultsContainer" style="margin-top:1rem; display:none;">
+    <div class="actions" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <label style="display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" id="selectAll" style="transform:scale(1.5);" /> Select All
+      </label>
+      <button class="btn" id="btnRecreate">Recreate Selected</button>
+    </div>
+
+    <table class="data" style="width:100%;border-collapse:collapse;">
+      <thead>
+        <tr style="background:#eaf2f8;text-align:left;">
+          <th style="width:55px;"></th>
+          <th>Received Date</th>
+          <th>Client Name</th>
+          <th>First Generated At</th>
+          <th>Form ID</th>
+        </tr>
+      </thead>
+      <tbody id="resultsBody"></tbody>
+    </table>
+  </div>
+</div>
+
+<style>
+  .input-lg {
+    padding:10px 12px;
+    border-radius:10px;
+    border:1px solid #cbd5e1;
+    font-size:16px;
+    flex:1;
+    min-width:160px;
+  }
+  .input-lg:focus {
+    outline:none;
+    box-shadow:0 0 0 2px var(--accent,#0ea5e9);
+  }
+  .spinner {
+    width:22px;height:22px;
+    border-radius:50%;
+    border:3px solid #e2e8f0;
+    border-top-color:var(--accent,#0ea5e9);
+    animation:spin 1s linear infinite;
+    display:inline-block;
+    vertical-align:middle;
+    margin-right:8px;
+  }
+  @keyframes spin {to{transform:rotate(360deg)}}
+
+.msg.success {
+  background: #dcfce7;
+  color: #065f46;
+  border-left: 4px solid #22c55e;
+  padding: 14px 18px;
+  border-radius: 10px;
+  margin-top: 16px;
+  margin-bottom: 16px;
+  position: relative;
+  z-index: 0;
+}
+
+.msg.success a.btn {
+  position: static !important;
+  display: inline-block;
+  vertical-align: middle;
+  box-shadow: none;
+  margin-left: 6px;
+}
+
+/* Link-style button inside success message */
+.msg.success a.btn.secondary {
+  background: transparent !important;
+  color: var(--accent, #0ea5e9) !important;
+  font-weight: 600;
+  text-decoration: underline;
+  padding: 0;
+  box-shadow: none;
+  border-radius: 0;
+  margin-left: 4px;
+}
+
+.msg.success a.btn.secondary:hover {
+  color: var(--accent-hover, #0284c7) !important;
+  background: transparent !important;
+}
+</style>
+
+<script>
+(function(){
+  const $  = sel => document.querySelector(sel);
+  const $$ = sel => [...document.querySelectorAll(sel)];
+  const msg = $('#msg');
+  const resultsContainer = $('#resultsContainer');
+  const resultsBody = $('#resultsBody');
+  const btnSearch = $('#btnSearch');
+  const btnRecreate = $('#btnRecreate');
+  const selectAll = $('#selectAll');
+
+  /* ===== Utility Helpers ===== */
+  function setMsg(html, type){
+    msg.innerHTML = html || '';
+    msg.className = 'msg ' + (type || '');
+    msg.style.display = html ? 'block' : 'none';
+  }
+
+  function setBusy(target, busy, text){
+    if(busy){
+      target.disabled = true;
+      msg.style.display = 'block';
+      msg.className = 'msg info';
+      msg.innerHTML = `<span class="spinner"></span>${text || 'Working…'}`;
+    } else {
+      target.disabled = false;
+    }
+  }
+
+  function clearResults(){
+    resultsBody.innerHTML = '';
+    resultsContainer.style.display = 'none';
+    selectAll.checked = false;
+  }
+
+  function escapeHtml(s){
+    const div=document.createElement('div');
+    div.innerText=String(s);
+    return div.innerHTML;
+  }
+
+  /* ===== Clear button ===== */
+  $('#btnClear').addEventListener('click', () => {
+    ['#startDate','#endDate','#firstName','#lastName','#formId'].forEach(id => $(id).value='');
+    clearResults();
+    setMsg('', '');
+  });
+
+  /* ===== Search button ===== */
+  $('#btnSearch').addEventListener('click', () => {
+    const q = {
+      start: $('#startDate').value,
+      end: $('#endDate').value,
+      first: $('#firstName').value.trim(),
+      last: $('#lastName').value.trim(),
+      formId: $('#formId').value.trim()
+    };
+
+    if(!q.start && !q.end && !q.first && !q.last && !q.formId){
+      setMsg('Enter a date range, name, or Form ID to search.', 'error');
+      return;
+    }
+
+    clearResults();
+    setBusy(btnSearch, true, 'Searching…');
+
+    google.script.run
+      .withSuccessHandler(res => {
+        setBusy(btnSearch, false);
+        renderResults(res);
+      })
+      .withFailureHandler(err => {
+        setBusy(btnSearch, false);
+        setMsg('Search failed: ' + err.message, 'error');
+      })
+      .searchFormsForRecreate(q);
+  });
+
+  /* ===== Render search results ===== */
+  function renderResults(res){
+    if(!res || !res.ok){ setMsg(res?.message || 'No results','error'); return; }
+    const rows = res.rows || [];
+    if(!rows.length){ setMsg('No matches found','error'); return; }
+
+    selectAll.checked = false;
+    resultsBody.innerHTML = rows.map(r => `
+      <tr style="border-bottom:1px solid #e2e8f0;">
+        <td><input type="checkbox" class="chk" data-id="${escapeHtml(r.formId)}" style="transform:scale(1.5);" /></td>
+        <td>${escapeHtml(r.timestamp||'')}</td>
+        <td>${escapeHtml(r.name||'')}</td>
+        <td>${escapeHtml(r.generatedAt||'')}</td>
+        <td>${escapeHtml(r.formId||'')}</td>
+      </tr>`).join('');
+
+    resultsContainer.style.display = 'block';
+    setMsg(`${rows.length} result${rows.length>1?'s':''} found.`, 'success');
+  }
+
+  /* ===== Select all toggle ===== */
+  selectAll.addEventListener('change', e => {
+    $$('.chk').forEach(c => c.checked = e.target.checked);
+  });
+
+  /* ===== Recreate selected ===== */
+  $('#btnRecreate').addEventListener('click', () => {
+    const ids = $$('.chk:checked').map(c => c.dataset.id);
+    if(!ids.length){
+      setMsg('Select at least one form to recreate.', 'error');
+      return;
+    }
+
+    setBusy(btnRecreate, true, `Recreating ${ids.length} form${ids.length>1?'s':''}…`);
+    google.script.run
+      .withSuccessHandler(r => {
+        setBusy(btnRecreate, false);
+        console.log('Recreate result (final):', r);
+        if(r && r.ok){
+          const linkHtml = `<a href="#" id="goGrabLink" class="btn secondary" style="margin-left:8px;">Go to Grab New Forms →</a>`;
+          const msgHtml = `
+            ✅ ${r.results.length} form${r.results.length>1?'s':''} successfully recreated.<br>
+            You can now use the ${linkHtml} function to print.
+          `;
+          msg.style.display = 'block';
+          msg.className = 'msg success';
+          msg.innerHTML = msgHtml;
+
+          setTimeout(() => {
+            const goLink = document.getElementById('goGrabLink');
+            if(goLink){
+              goLink.addEventListener('click', e=>{
+                e.preventDefault();
+                if (typeof showScreen === 'function') {
+                  showScreen('grab');
+                  if (typeof startGrab === 'function') startGrab(); // ensure Grab initializes
+                }
+              });
+            }
+          }, 100);
+
+          clearResults();
+        } else {
+          setMsg(r?.message || 'Recreate failed.', 'error');
+        }
+      })
+      .withFailureHandler(err => {
+        setBusy(btnRecreate, false);
+        setMsg('Recreate error: ' + err.message, 'error');
+      })
+      .recreateFormsById(ids);
+  });
+
+  /* ===== Back button ===== */
+  $('#backFromRecreate').addEventListener('click', ()=> showScreen('home'));
+})();
+</script>
