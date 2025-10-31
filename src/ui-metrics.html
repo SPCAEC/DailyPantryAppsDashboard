@@ -141,36 +141,45 @@
     return $$('#statusMenu input:checked').map(cb=>cb.value);
   }
 
-  /* ===== Search button ===== */
-  $('#btnSearch').addEventListener('click',()=>{
-    const selectedRange = $('.quick-btn.active')?.dataset.range || '';
-    const statuses = getSelectedStatuses();
-    if(!selectedRange){
-      setMsg('Please choose a date range first.','error');
-      return;
-    }
+// ===== Search button =====
+$('#btnSearch').addEventListener('click',()=>{
+  const selectedRange = $('.quick-btn.active')?.dataset.range || '';
+  const statuses = getSelectedStatuses();
+  if(!selectedRange){
+    setMsg('Please choose a date range first.','error');
+    return;
+  }
 
-    setBusy(true, `Searching for ${statuses.join(', ')} in range ${selectedRange}…`);
+  setBusy(true, `Searching for ${statuses.join(', ')} in range ${selectedRange}…`);
 
-    const q = {
-      range: selectedRange,
-      statuses,
-      start: $('#startDate').value || '',
-      end: $('#endDate').value || ''
-    };
+  const q = {
+    range: selectedRange,
+    statuses,
+    start: $('#startDate').value || '',
+    end: $('#endDate').value || ''
+  };
 
-    google.script.run
-      .withSuccessHandler(res=>{
-        setBusy(false);
-        if(!res || !res.ok){ setMsg(res?.message || 'No results found.','error'); return; }
-        renderResults(res.rows || []);
-      })
-      .withFailureHandler(err=>{
-        setBusy(false);
-        setMsg('Search failed: ' + err.message,'error');
-      })
-      .searchOrderMetrics(q);
-  });
+  google.script.run
+    .withSuccessHandler(res=>{
+      setBusy(false);
+      if (!res) { setMsg('No data returned from server.','error'); return; }
+      
+      // Normalize shape in case Apps Script flattens it
+      const rows = res.rows || (Array.isArray(res) ? res : []);
+      
+      if (!rows.length) {
+        setMsg('No results found.','error');
+        return;
+      }
+      
+      renderResults(rows);
+    })
+    .withFailureHandler(err=>{
+      setBusy(false);
+      setMsg('Search failed: ' + err.message,'error');
+    })
+    .searchOrderMetrics(q);
+});
 
   /* ===== Render Results ===== */
   function renderResults(rows){
