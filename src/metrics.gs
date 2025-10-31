@@ -12,7 +12,7 @@ const METRICS_CFG = {
 };
 
 /**
- * Called by frontend.
+ * Called by frontend via google.script.run
  * q = { range, statuses[], start, end }
  */
 function searchOrderMetrics(q) {
@@ -23,11 +23,11 @@ function searchOrderMetrics(q) {
     const sh = ss.getSheetByName(METRICS_CFG.SHEET_NAME);
     if (!sh) throw new Error('Sheet not found.');
 
-    const vals = sh.getDataRange().getValues();
-    const headers = vals.shift();
+    const values = sh.getDataRange().getValues();
+    const headers = values.shift();
     const map = Object.fromEntries(headers.map((h, i) => [h, i]));
 
-    // --- Date filters ---
+    // --- Define date range ---
     const today = new Date();
     const tz = METRICS_CFG.TZ;
 
@@ -59,44 +59,45 @@ function searchOrderMetrics(q) {
         throw new Error('Date range is required.');
     }
 
-    const statuses = Array.isArray(q.statuses) ? q.statuses : ['Any'];
-    const out = [];
+    // --- Status filter ---
+    const statuses = Array.isArray(q.statuses) && q.statuses.length ? q.statuses : ['Any'];
+    const results = [];
 
-    vals.forEach(r => {
+    for (let r of values) {
       const ts = parseDateSafe_(r[map['Timestamp']]);
-      if (!ts || ts < start || ts > end) return;
+      if (!ts || ts < start || ts > end) continue;
 
-      const obj = {
+      const row = {
         formId: String(r[map['FormID']] || ''),
-        printed: r[map['Printed At']] || '',
-        fulfilled: r[map['Fulfilled Date']] || r[map['Fulfilled At']] || '',
-        notified: r[map['Notification Status']] || '',
-        pickedUp: r[map['Picked-Up']] || '',
-        restocked: r[map['Restocked']] || '',
+        printed: safeStr(r[map['Printed At']]),
+        fulfilled: safeStr(r[map['Fulfilled Date']] || r[map['Fulfilled At']]),
+        notified: safeStr(r[map['Notification Status']]),
+        pickedUp: safeStr(r[map['Picked-Up']]),
+        restocked: safeStr(r[map['Restocked']]),
         requestDate: Utilities.formatDate(ts, tz, 'yyyy-MM-dd'),
-        clientName: `${r[map['First Name']] || ''} ${r[map['Last Name']] || ''}`.trim(),
-        phone: r[map['Phone Number']] || ''
+        clientName: `${safeStr(r[map['First Name']])} ${safeStr(r[map['Last Name']])}`.trim(),
+        phone: safeStr(r[map['Phone Number']]),
       };
 
-      // --- Determine status ---
-      obj.status = computeStatus_(r, map, ts);
+      row.status = computeStatus_(r, map, ts);
 
-      // --- Apply status filter ---
-      if (statuses.includes('Any') || statuses.includes(obj.status)) {
-        out.push(obj);
+      // Apply filters
+      if (statuses.includes('Any') || statuses.includes(row.status)) {
+        results.push(row);
       }
-    });
+    }
 
-    Logger.log(`✅ searchOrderMetrics found ${out.length} rows.`);
-    return { ok: true, rows: out };
+    Logger.log(`✅ searchOrderMetrics found ${results.length} rows.`);
+    // Return plain JSON-safe object — not a ContentService output
+    return { ok: true, rows: results };
 
   } catch (err) {
-    Logger.log('❌ searchOrderMetrics failed: %s', err);
+    Logger.log(`❌ searchOrderMetrics failed: ${err}`);
     return { ok: false, message: String(err) };
   }
 }
 
-/* --- Helpers --- */
+/* ---------- Helpers ---------- */
 
 function computeStatus_(r, map, ts) {
   const gen = r[map['Generated At']] || '';
@@ -129,4 +130,8 @@ function parseDateSafe_(v) {
     const d = new Date(s);
     return isNaN(d) ? null : d;
   } catch (_) { return null; }
+}
+
+function safeStr(v) {
+  return v == null ? '' : String(v).trim();
 }
