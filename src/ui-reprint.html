@@ -1,55 +1,56 @@
 <div class="card">
-  <div class="toolbar" style="justify-content:space-between;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
-    <button id="backFromReprint" class="btn ghost">← Back</button>
+  <div class="toolbar" style="justify-content:space-between;align-items:center;flex-wrap:wrap;">
+    <button id="reprintBackBtn" class="btn ghost">← Back</button>
     <h2 style="margin:0;">Reprint Forms</h2>
   </div>
 
   <p>Search archived Pantry forms by date or client name. Selected forms will open as one merged PDF for printing — no files are saved or moved.</p>
 
   <!-- Search controls -->
-  <div class="row" style="display:grid;gap:16px;margin-bottom:14px;">
+  <div class="row" style="display:grid;gap:16px;margin-top:10px;">
+    <!-- Date range -->
     <div class="field" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
-      <label style="min-width:120px;">Date range</label>
-      <input type="date" id="startDate" class="input-lg" />
+      <label style="min-width:170px;"><strong>Date range (inclusive)</strong></label>
+      <input type="date" id="rpStart" class="input-lg" />
       <span>–</span>
-      <input type="date" id="endDate" class="input-lg" />
+      <input type="date" id="rpEnd" class="input-lg" />
     </div>
 
+    <!-- Name (first/last) -->
     <div class="field" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
-      <label style="min-width:120px;">Client name</label>
-      <input type="text" id="firstName" class="input-lg" placeholder="First name" />
-      <input type="text" id="lastName" class="input-lg" placeholder="Last name" />
+      <label style="min-width:170px;"><strong>Client name</strong></label>
+      <input type="text" id="rpFirst" class="input-lg" placeholder="First name" />
+      <input type="text" id="rpLast"  class="input-lg" placeholder="Last name" />
     </div>
 
-    <div class="actions" style="margin-top:10px;">
-      <button class="btn" id="btnSearchArchive">Search Archive</button>
-      <button class="btn secondary" id="btnClear">Clear</button>
+    <div class="actions" style="margin-top:6px;display:flex;gap:10px;align-items:center;">
+      <button id="rpSearchBtn" class="btn">Search Archive</button>
+      <button id="rpClearBtn" class="btn secondary">Clear</button>
     </div>
   </div>
 
-  <!-- Message -->
-  <div id="msg" class="msg" style="display:none;"></div>
+  <!-- Progress / message -->
+  <div id="rpMsg" class="msg" style="display:none;margin-top:12px;"></div>
 
   <!-- Results -->
-  <div id="resultsContainer" style="margin-top:1rem; display:none;">
+  <div id="rpResultsWrap" style="display:none;margin-top:16px;">
     <div class="actions" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-      <label style="display:flex;align-items:center;gap:6px;">
-        <input type="checkbox" id="selectAll" style="transform:scale(1.4);" /> Select All
+      <label style="display:flex;align-items:center;gap:8px;">
+        <input type="checkbox" id="rpSelectAll" style="transform:scale(1.3);" />
+        <span>Select All</span>
       </label>
-      <button class="btn" id="btnReprint">Reprint Selected</button>
+      <button id="rpMergeBtn" class="btn">Merge & Print</button>
     </div>
 
     <table class="data" style="width:100%;border-collapse:collapse;">
       <thead>
         <tr style="background:#eaf2f8;text-align:left;">
-          <th style="width:50px;"></th>
-          <th>Received Date</th>
-          <th>Client Name</th>
-          <th>Generated At</th>
-          <th>Form ID</th>
+          <th style="width:48px;"></th>
+          <th>File name</th>
+          <th style="width:180px;">Created</th>
         </tr>
       </thead>
-      <tbody id="resultsBody"></tbody>
+      <tbody id="rpTbody"></tbody>
     </table>
   </div>
 </div>
@@ -60,153 +61,153 @@
     border-radius:10px;
     border:1px solid #cbd5e1;
     font-size:16px;
-    flex:1;
-    min-width:160px;
+    min-width:170px;
   }
-  .input-lg:focus {
-    outline:none;
-    box-shadow:0 0 0 2px var(--accent,#0ea5e9);
-  }
+  .input-lg:focus { outline:none; box-shadow:0 0 0 2px var(--accent,#0ea5e9); }
+
   .spinner {
-    width:22px;height:22px;
-    border-radius:50%;
-    border:3px solid #e2e8f0;
-    border-top-color:var(--accent,#0ea5e9);
-    animation:spin 1s linear infinite;
-    display:inline-block;
-    vertical-align:middle;
-    margin-right:8px;
+    width:22px;height:22px;border-radius:50%;
+    border:3px solid #e2e8f0;border-top-color:var(--accent,#0ea5e9);
+    animation:spin 1s linear infinite;display:inline-block;vertical-align:middle;margin-right:8px;
   }
-  @keyframes spin {to{transform:rotate(360deg)}}
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .data th, .data td { padding:10px 12px; border-bottom:1px solid #e2e8f0; }
+  .data tbody tr:nth-child(odd) { background:#f8fafc; }
 </style>
 
 <script>
 (function(){
-  const $  = sel => document.querySelector(sel);
-  const $$ = sel => [...document.querySelectorAll(sel)];
-  const msg = $('#msg');
-  const resultsContainer = $('#resultsContainer');
-  const resultsBody = $('#resultsBody');
-  const btnSearch = $('#btnSearchArchive');
-  const btnReprint = $('#btnReprint');
-  const selectAll = $('#selectAll');
+  const $  = s => document.querySelector(s);
+  const $$ = s => [...document.querySelectorAll(s)];
+  const msg = $('#rpMsg');
+  const tbody = $('#rpTbody');
+  const wrap = $('#rpResultsWrap');
+  const selectAll = $('#rpSelectAll');
+  const mergeBtn = $('#rpMergeBtn');
 
-  /* ===== Utility ===== */
+  // Back
+  $('#reprintBackBtn').addEventListener('click', () => showScreen('home'));
+
+  // Clear
+  $('#rpClearBtn').addEventListener('click', () => {
+    $('#rpStart').value = '';
+    $('#rpEnd').value = '';
+    $('#rpFirst').value = '';
+    $('#rpLast').value  = '';
+    setMsg('');
+    tbody.innerHTML = '';
+    wrap.style.display = 'none';
+    selectAll.checked = false;
+  });
+
+  // Search triggers
+  $('#rpSearchBtn').addEventListener('click', runSearch);
+  ['#rpStart','#rpEnd','#rpFirst','#rpLast'].forEach(sel => {
+    $(sel).addEventListener('keydown', e => {
+      if (e.key === 'Enter') { e.preventDefault(); runSearch(); }
+    });
+  });
+
+  // Select all toggle
+  selectAll.addEventListener('change', e => {
+    $$('.rpChk').forEach(c => c.checked = e.target.checked);
+  });
+
+  // Merge & print
+  mergeBtn.addEventListener('click', () => {
+    const ids = $$('.rpChk:checked').map(c => c.dataset.id);
+    if (!ids.length) { setMsg('Select at least one file to print.','error'); return; }
+
+    setBusy(true, `Merging ${ids.length} file${ids.length>1?'s':''}…`);
+    google.script.run
+      .withSuccessHandler(res => {
+        setBusy(false);
+        if (!res || !res.ok || !res.base64) {
+          setMsg(res && res.message ? res.message : 'Merge failed.','error');
+          return;
+        }
+        // Use the global helper from index.html
+        try {
+          openPrintableBase64(res.base64);
+          setMsg('Merged PDF ready to print.','success');
+        } catch (e) {
+          console.error(e);
+          setMsg('Could not open merged PDF.','error');
+        }
+      })
+      .withFailureHandler(err => {
+        setBusy(false);
+        setMsg('Server error during merge: ' + err.message,'error');
+      })
+      .getMergedPdfFromArchive(ids);
+  });
+
+  // Core search logic
+  function runSearch(){
+    const start = $('#rpStart').value;
+    const end   = $('#rpEnd').value;
+    const first = $('#rpFirst').value.trim();
+    const last  = $('#rpLast').value.trim();
+
+    // Require either date range OR a name
+    if (!(start && end) && !(first || last)) {
+      setMsg('Enter a date range or a client name to search.','error');
+      return;
+    }
+
+    tbody.innerHTML = '';
+    wrap.style.display = 'none';
+    selectAll.checked = false;
+
+    // Prefer date search if both dates present; otherwise search by name
+    if (start && end) {
+      setBusy(true, 'Searching archive by date…');
+      google.script.run
+        .withSuccessHandler(res => { setBusy(false); renderResults(res); })
+        .withFailureHandler(err => { setBusy(false); setMsg('Search failed: ' + err.message,'error'); })
+        .searchArchiveByDateRange(start, end);
+    } else {
+      const q = [first, last].filter(Boolean).join(' ').trim();
+      setBusy(true, 'Searching archive by name…');
+      google.script.run
+        .withSuccessHandler(res => { setBusy(false); renderResults(res); })
+        .withFailureHandler(err => { setBusy(false); setMsg('Search failed: ' + err.message,'error'); })
+        .searchArchiveByClientName(q);
+    }
+  }
+
+  // Render results
+  function renderResults(res){
+    if (!res || !res.ok) { setMsg(res && res.message ? res.message : 'No results.','error'); return; }
+    const files = Array.isArray(res.files) ? res.files : [];
+    if (!files.length) { setMsg('No matching files found.','error'); return; }
+
+    tbody.innerHTML = files.map(f => `
+      <tr>
+        <td><input type="checkbox" class="rpChk" data-id="${escapeHtml(f.id)}" /></td>
+        <td>${escapeHtml(f.name)}</td>
+        <td>${escapeHtml(f.created)}</td>
+      </tr>
+    `).join('');
+
+    wrap.style.display = 'block';
+    setMsg(`${files.length} result${files.length>1?'s':''} found.`,'success');
+  }
+
+  // UI helpers
+  function setBusy(busy, text){
+    if (busy) setMsg(`<span class="spinner"></span>${escapeHtml(text||'Working…')}`,'info');
+    else setMsg('');
+  }
   function setMsg(html, type){
     msg.innerHTML = html || '';
     msg.className = 'msg ' + (type || '');
     msg.style.display = html ? 'block' : 'none';
   }
-
-  function setBusy(target, busy, text){
-    if(busy){
-      target.disabled = true;
-      setMsg(`<span class="spinner"></span>${text || 'Working…'}`, '');
-    } else {
-      target.disabled = false;
-    }
-  }
-
-  function clearResults(){
-    resultsBody.innerHTML = '';
-    resultsContainer.style.display = 'none';
-    selectAll.checked = false;
-    setMsg('', '');
-  }
-
-  /* ===== Clear ===== */
-  $('#btnClear').addEventListener('click', () => {
-    ['#startDate','#endDate','#firstName','#lastName'].forEach(id => $(id).value='');
-    clearResults();
-  });
-
-  /* ===== Back Button ===== */
-  $('#backFromReprint').addEventListener('click', ()=> showScreen('home'));
-
-  /* ===== Search ===== */
-  $('#btnSearchArchive').addEventListener('click', () => {
-    const q = {
-      start: $('#startDate').value,
-      end: $('#endDate').value,
-      first: $('#firstName').value.trim(),
-      last: $('#lastName').value.trim()
-    };
-
-    if(!q.start && !q.end && !q.first && !q.last){
-      setMsg('Enter a date range or name to search.', 'error');
-      return;
-    }
-
-    clearResults();
-    setBusy(btnSearch, true, 'Searching archive…');
-
-    google.script.run
-      .withSuccessHandler(res => {
-        setBusy(btnSearch, false);
-        renderResults(res);
-      })
-      .withFailureHandler(err => {
-        setBusy(btnSearch, false);
-        setMsg('Search failed: ' + err.message, 'error');
-      })
-      .searchFormsForRecreate(q); // same backend search function
-  });
-
-  /* ===== Render ===== */
-  function renderResults(res){
-    if(!res || !res.ok){ setMsg(res?.message || 'No results','error'); return; }
-    const rows = res.rows || [];
-    if(!rows.length){ setMsg('No matches found','error'); return; }
-
-    selectAll.checked = false;
-    resultsBody.innerHTML = rows.map(r => `
-      <tr style="border-bottom:1px solid #e2e8f0;">
-        <td><input type="checkbox" class="chk" data-id="${escapeHtml(r.formId)}" style="transform:scale(1.4);" /></td>
-        <td>${escapeHtml(r.timestamp||'')}</td>
-        <td>${escapeHtml(r.name||'')}</td>
-        <td>${escapeHtml(r.generatedAt||'')}</td>
-        <td>${escapeHtml(r.formId||'')}</td>
-      </tr>`).join('');
-
-    resultsContainer.style.display = 'block';
-    setMsg(`${rows.length} archived form${rows.length>1?'s':''} found.`, 'success');
-  }
-
-  /* ===== Select All ===== */
-  selectAll.addEventListener('change', e => {
-    $$('.chk').forEach(c => c.checked = e.target.checked);
-  });
-
-  /* ===== Reprint Selected ===== */
-  $('#btnReprint').addEventListener('click', () => {
-    const ids = $$('.chk:checked').map(c => c.dataset.id);
-    if(!ids.length){
-      setMsg('Select at least one form to reprint.', 'error');
-      return;
-    }
-
-    setBusy(btnReprint, true, `Merging ${ids.length} form${ids.length>1?'s':''}…`);
-
-    google.script.run
-      .withSuccessHandler(res => {
-        setBusy(btnReprint, false);
-        if(res.ok && res.url){
-          setMsg(`✅ Merged PDF ready. Opening now…`, 'success');
-          window.open(res.url, '_blank');
-        } else {
-          setMsg(res.message || 'Reprint failed.', 'error');
-        }
-      })
-      .withFailureHandler(err => {
-        setBusy(btnReprint, false);
-        setMsg('Reprint error: ' + err.message, 'error');
-      })
-      .getMergedPdfFromArchive(ids);
-  });
-
   function escapeHtml(s){
-    const div=document.createElement('div');
-    div.innerText=String(s);
+    const div = document.createElement('div');
+    div.innerText = String(s==null?'':s);
     return div.innerHTML;
   }
 })();
