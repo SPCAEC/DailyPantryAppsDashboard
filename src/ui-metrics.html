@@ -52,7 +52,9 @@
 
   <!-- Spinner + message -->
   <div id="msg" class="msg" style="display:none;margin-top:12px;"></div>
-  <div id="resultsContainer" style="display:none;margin-top:20px;"></div>
+
+  <!-- Results -->
+  <div id="resultsContainer" style="display:none;margin-top:20px;overflow:auto;max-height:500px;"></div>
 </div>
 
 <style>
@@ -108,12 +110,31 @@
     margin-right:8px;
   }
   @keyframes spin {to{transform:rotate(360deg)}}
+
+  #resultsContainer table {
+    width:100%;
+    border-collapse:collapse;
+  }
+  #resultsContainer th, #resultsContainer td {
+    padding:8px 10px;
+    border-bottom:1px solid #e2e8f0;
+    text-align:left;
+    font-size:15px;
+  }
+  #resultsContainer th {
+    background:#eaf2f8;
+    position:sticky;
+    top:0;
+    z-index:1;
+  }
+  #resultsContainer tr:nth-child(even){background:#f8fafc;}
 </style>
 
 <script>
 (function(){
   const $ = sel => document.querySelector(sel);
   const $$ = sel => [...document.querySelectorAll(sel)];
+
   const quickBtns = $$('#quickDates .quick-btn');
   const customRange = $('#customRange');
   const dropdown = $('.dropdown');
@@ -138,56 +159,56 @@
   });
 
   function getSelectedStatuses(){
-    return $$('#statusMenu input:checked').map(cb=>cb.value);
+    const all = $$('#statusMenu input:checked').map(cb=>cb.value);
+    return all.includes('Any') ? ['Any'] : all;
   }
 
-// ===== Search button =====
-$('#btnSearch').addEventListener('click',()=>{
-  const selectedRange = $('.quick-btn.active')?.dataset.range || '';
-  const statuses = getSelectedStatuses();
-  if(!selectedRange){
-    setMsg('Please choose a date range first.','error');
-    return;
-  }
+  /* ===== Search button ===== */
+  $('#btnSearch').addEventListener('click',()=>{
+    const selectedRange = $('.quick-btn.active')?.dataset.range || '';
+    const statuses = getSelectedStatuses();
+    if(!selectedRange){
+      setMsg('Please choose a date range first.','error');
+      return;
+    }
 
-  setBusy(true, `Searching for ${statuses.join(', ')} in range ${selectedRange}…`);
+    setBusy(true, `Searching for ${statuses.join(', ')} in range ${selectedRange}…`);
 
-  const q = {
-    range: selectedRange,
-    statuses,
-    start: $('#startDate').value || '',
-    end: $('#endDate').value || ''
-  };
+    const q = {
+      range: selectedRange,
+      statuses,
+      start: $('#startDate').value || '',
+      end: $('#endDate').value || ''
+    };
 
-  google.script.run
-    .withSuccessHandler(res=>{
-      setBusy(false);
-      if (!res) { setMsg('No data returned from server.','error'); return; }
-      
-      // Normalize shape in case Apps Script flattens it
-      const rows = res.rows || (Array.isArray(res) ? res : []);
-      
-      if (!rows.length) {
-        setMsg('No results found.','error');
-        return;
-      }
-      
-      renderResults(rows);
-    })
-    .withFailureHandler(err=>{
-      setBusy(false);
-      setMsg('Search failed: ' + err.message,'error');
-    })
-    .searchOrderMetrics(q);
-});
+    google.script.run
+      .withSuccessHandler(res => {
+        setBusy(false);
+        if (!res) { setMsg('No response from server.','error'); return; }
+
+        // Normalize possible Apps Script return formats
+        let rows = [];
+        if (Array.isArray(res.rows)) rows = res.rows;
+        else if (Array.isArray(res)) rows = res;
+        else if (res.rows && typeof res.rows === 'object') rows = Object.values(res.rows);
+
+        if (!rows.length) { setMsg('No results found.','error'); return; }
+        renderResults(rows);
+      })
+      .withFailureHandler(err => {
+        setBusy(false);
+        setMsg('Search failed: ' + err.message, 'error');
+      })
+      .searchOrderMetrics(q);
+  });
 
   /* ===== Render Results ===== */
   function renderResults(rows){
     if(!rows.length){ setMsg('No matching orders found.','error'); return; }
     results.innerHTML = `
-      <table style="width:100%;border-collapse:collapse;">
+      <table>
         <thead>
-          <tr style="background:#eaf2f8;">
+          <tr>
             <th>Status</th><th>Date of Request</th><th>Form ID</th>
             <th>Client Name</th><th>Phone</th>
             <th>Printed</th><th>Fulfilled</th><th>Notified</th>
@@ -196,17 +217,17 @@ $('#btnSearch').addEventListener('click',()=>{
         </thead>
         <tbody>
           ${rows.map((r,i)=>`
-            <tr style="background:${i%2?'#f8fafc':'#fff'};">
-              <td>${r.status||''}</td>
-              <td>${r.requestDate||''}</td>
-              <td>${r.formId||''}</td>
-              <td>${r.clientName||''}</td>
-              <td>${r.phone||''}</td>
-              <td>${r.printed||''}</td>
-              <td>${r.fulfilled||''}</td>
-              <td>${r.notified||''}</td>
-              <td>${r.pickedUp||''}</td>
-              <td>${r.restocked||''}</td>
+            <tr>
+              <td>${escapeHtml(r.status||'')}</td>
+              <td>${escapeHtml(r.requestDate||'')}</td>
+              <td>${escapeHtml(r.formId||'')}</td>
+              <td>${escapeHtml(r.clientName||'')}</td>
+              <td>${escapeHtml(r.phone||'')}</td>
+              <td>${escapeHtml(r.printed||'')}</td>
+              <td>${escapeHtml(r.fulfilled||'')}</td>
+              <td>${escapeHtml(r.notified||'')}</td>
+              <td>${escapeHtml(r.pickedUp||'')}</td>
+              <td>${escapeHtml(r.restocked||'')}</td>
             </tr>`).join('')}
         </tbody>
       </table>
@@ -232,16 +253,23 @@ $('#btnSearch').addEventListener('click',()=>{
   /* ===== Helpers ===== */
   function setBusy(isBusy,text){
     if(isBusy){
-      setMsg(`<span class="spinner"></span>${text||'Working…'}`,'info');
+      msg.innerHTML = `<span class="spinner"></span>${text||'Working…'}`;
+      msg.className = 'msg info';
+      msg.style.display = 'block';
     } else {
-      msg.innerHTML='';
-      msg.style.display='none';
+      msg.innerHTML = '';
+      msg.style.display = 'none';
     }
   }
   function setMsg(html,type){
     msg.innerHTML=html||'';
     msg.className='msg '+(type||'');
     msg.style.display=html?'block':'none';
+  }
+  function escapeHtml(str){
+    const div=document.createElement('div');
+    div.innerText=str??'';
+    return div.innerHTML;
   }
 })();
 </script>
