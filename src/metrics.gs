@@ -23,78 +23,89 @@ function searchOrderMetrics(q) {
     const sh = ss.getSheetByName(METRICS_CFG.SHEET_NAME);
     if (!sh) throw new Error('Sheet not found.');
 
-    const values = sh.getDataRange().getValues();
-    const headers = values.shift();
+    const vals = sh.getDataRange().getValues();
+    const headers = vals.shift();
     const map = Object.fromEntries(headers.map((h, i) => [h, i]));
-
-    // --- Define date range ---
+    const tz = METRICS_CFG.TZ || 'America/New_York';
     const today = new Date();
-    const tz = METRICS_CFG.TZ;
 
+    // --- Date range handling ---
     let start, end;
     switch (q.range) {
       case 'today':
-        start = new Date(today); start.setHours(0,0,0,0);
-        end = new Date(today); end.setHours(23,59,59,999);
+        start = startOfDay_(today, tz);
+        end = endOfDay_(today, tz);
         break;
       case 'yesterday':
-        start = new Date(today); start.setDate(today.getDate() - 1); start.setHours(0,0,0,0);
-        end = new Date(today); end.setDate(today.getDate() - 1); end.setHours(23,59,59,999);
+        const y = new Date(today);
+        y.setDate(y.getDate() - 1);
+        start = startOfDay_(y, tz);
+        end = endOfDay_(y, tz);
         break;
       case '7':
-        start = new Date(today); start.setDate(today.getDate() - 7); start.setHours(0,0,0,0);
-        end = new Date(today); end.setHours(23,59,59,999);
+        start = new Date(today); start.setDate(today.getDate() - 7);
+        start = startOfDay_(start, tz);
+        end = endOfDay_(today, tz);
         break;
       case '30':
-        start = new Date(today); start.setDate(today.getDate() - 30); start.setHours(0,0,0,0);
-        end = new Date(today); end.setHours(23,59,59,999);
+        start = new Date(today); start.setDate(today.getDate() - 30);
+        start = startOfDay_(start, tz);
+        end = endOfDay_(today, tz);
         break;
       case 'custom':
-        start = q.start ? new Date(q.start) : null;
-        end = q.end ? new Date(q.end) : null;
+        start = q.start ? startOfDay_(new Date(q.start), tz) : null;
+        end = q.end ? endOfDay_(new Date(q.end), tz) : null;
         if (!start || !end) throw new Error('Invalid custom date range.');
-        end.setHours(23,59,59,999);
         break;
       default:
-        throw new Error('Date range is required.');
+        throw new Error('Date range required.');
     }
 
-    // --- Status filter ---
     const statuses = Array.isArray(q.statuses) && q.statuses.length ? q.statuses : ['Any'];
-    const results = [];
+    const out = [];
 
-    for (let r of values) {
-      const ts = parseDateSafe_(r[map['Timestamp']]);
-      if (!ts || ts < start || ts > end) continue;
+    vals.forEach(r => {
+      const tsRaw = r[map['Timestamp']];
+      const ts = parseDateSafe_(tsRaw);
+      if (!ts) return;
 
-      const row = {
+      const tsLocal = new Date(Utilities.formatDate(ts, tz, 'yyyy-MM-dd\'T\'HH:mm:ss'));
+      if (tsLocal < start || tsLocal > end) return;
+
+      const obj = {
         formId: String(r[map['FormID']] || ''),
-        printed: safeStr(r[map['Printed At']]),
-        fulfilled: safeStr(r[map['Fulfilled Date']] || r[map['Fulfilled At']]),
-        notified: safeStr(r[map['Notification Status']]),
-        pickedUp: safeStr(r[map['Picked-Up']]),
-        restocked: safeStr(r[map['Restocked']]),
-        requestDate: Utilities.formatDate(ts, tz, 'yyyy-MM-dd'),
-        clientName: `${safeStr(r[map['First Name']])} ${safeStr(r[map['Last Name']])}`.trim(),
-        phone: safeStr(r[map['Phone Number']]),
+        printed: r[map['Printed At']] || '',
+        fulfilled: r[map['Fulfilled Date']] || r[map['Fulfilled At']] || '',
+        notified: r[map['Notification Status']] || '',
+        pickedUp: r[map['Picked-Up']] || '',
+        restocked: r[map['Restocked']] || '',
+        requestDate: Utilities.formatDate(tsLocal, tz, 'yyyy-MM-dd'),
+        clientName: `${r[map['First Name']] || ''} ${r[map['Last Name']] || ''}`.trim(),
+        phone: r[map['Phone Number']] || ''
       };
 
-      row.status = computeStatus_(r, map, ts);
+      obj.status = computeStatus_(r, map, ts);
+      if (statuses.includes('Any') || statuses.includes(obj.status)) out.push(obj);
+    });
 
-      // Apply filters
-      if (statuses.includes('Any') || statuses.includes(row.status)) {
-        results.push(row);
-      }
-    }
-
-    Logger.log(`✅ searchOrderMetrics found ${results.length} rows.`);
-    // Return plain JSON-safe object — not a ContentService output
-    return { ok: true, rows: results };
+    Logger.log(`✅ searchOrderMetrics found ${out.length} rows.`);
+    return { ok: true, rows: out };
 
   } catch (err) {
-    Logger.log(`❌ searchOrderMetrics failed: ${err}`);
+    Logger.log('❌ searchOrderMetrics failed: %s', err);
     return { ok: false, message: String(err) };
   }
+}
+
+// --- Helpers to bound days correctly in local TZ ---
+function startOfDay_(d, tz) {
+  const s = Utilities.formatDate(d, tz, 'yyyy-MM-dd');
+  return new Date(`${s}T00:00:00`);
+}
+function endOfDay_(d, tz) {
+  const s = Utilities.formatDate(d, tz, 'yyyy-MM-dd');
+  return new Date(`${s}T23:59:59`);
+}
 }
 
 /* ---------- Helpers ---------- */
