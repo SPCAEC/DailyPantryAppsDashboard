@@ -26,50 +26,23 @@ function searchOrderMetrics(q) {
     const vals = sh.getDataRange().getValues();
     const headers = vals.shift();
     const map = Object.fromEntries(headers.map((h, i) => [h, i]));
-    const tz = METRICS_CFG.TZ || 'America/New_York';
+    const tz = 'America/New_York'; // Force Eastern
     const today = new Date();
 
-    // --- Date range handling ---
-    let start, end;
-    switch (q.range) {
-      case 'today':
-        start = startOfDay_(today, tz);
-        end = endOfDay_(today, tz);
-        break;
-      case 'yesterday':
-        const y = new Date(today);
-        y.setDate(y.getDate() - 1);
-        start = startOfDay_(y, tz);
-        end = endOfDay_(y, tz);
-        break;
-      case '7':
-        start = new Date(today); start.setDate(today.getDate() - 7);
-        start = startOfDay_(start, tz);
-        end = endOfDay_(today, tz);
-        break;
-      case '30':
-        start = new Date(today); start.setDate(today.getDate() - 30);
-        start = startOfDay_(start, tz);
-        end = endOfDay_(today, tz);
-        break;
-      case 'custom':
-        start = q.start ? startOfDay_(new Date(q.start), tz) : null;
-        end = q.end ? endOfDay_(new Date(q.end), tz) : null;
-        if (!start || !end) throw new Error('Invalid custom date range.');
-        break;
-      default:
-        throw new Error('Date range required.');
-    }
+    // --- Date range calculation ---
+    const startEnd = calcRange_(q.range, q.start, q.end, tz);
+    const start = startEnd.start;
+    const end = startEnd.end;
 
     const statuses = Array.isArray(q.statuses) && q.statuses.length ? q.statuses : ['Any'];
     const out = [];
 
     vals.forEach(r => {
-      const tsRaw = r[map['Timestamp']];
-      const ts = parseDateSafe_(tsRaw);
+      const ts = parseDateSafe_(r[map['Timestamp']]);
       if (!ts) return;
 
-      const tsLocal = new Date(Utilities.formatDate(ts, tz, 'yyyy-MM-dd\'T\'HH:mm:ss'));
+      // Shift UTC → Eastern manually
+      const tsLocal = convertToTZ_(ts, tz);
       if (tsLocal < start || tsLocal > end) return;
 
       const obj = {
@@ -84,7 +57,7 @@ function searchOrderMetrics(q) {
         phone: r[map['Phone Number']] || ''
       };
 
-      obj.status = computeStatus_(r, map, ts);
+      obj.status = computeStatus_(r, map, tsLocal);
       if (statuses.includes('Any') || statuses.includes(obj.status)) out.push(obj);
     });
 
@@ -97,7 +70,37 @@ function searchOrderMetrics(q) {
   }
 }
 
-// --- Helpers to bound days correctly in local TZ ---
+/* --- Helper functions --- */
+
+function calcRange_(range, startInput, endInput, tz) {
+  const today = new Date();
+  const start = new Date();
+  const end = new Date();
+  switch (range) {
+    case 'today':
+      return { start: startOfDay_(today, tz), end: endOfDay_(today, tz) };
+    case 'yesterday':
+      const y = new Date(today);
+      y.setDate(today.getDate() - 1);
+      return { start: startOfDay_(y, tz), end: endOfDay_(y, tz) };
+    case '7':
+      const s7 = new Date(today);
+      s7.setDate(today.getDate() - 7);
+      return { start: startOfDay_(s7, tz), end: endOfDay_(today, tz) };
+    case '30':
+      const s30 = new Date(today);
+      s30.setDate(today.getDate() - 30);
+      return { start: startOfDay_(s30, tz), end: endOfDay_(today, tz) };
+    case 'custom':
+      const s = startInput ? startOfDay_(new Date(startInput), tz) : null;
+      const e = endInput ? endOfDay_(new Date(endInput), tz) : null;
+      if (!s || !e) throw new Error('Invalid custom date range.');
+      return { start: s, end: e };
+    default:
+      throw new Error('Invalid range.');
+  }
+}
+
 function startOfDay_(d, tz) {
   const s = Utilities.formatDate(d, tz, 'yyyy-MM-dd');
   return new Date(`${s}T00:00:00`);
@@ -105,6 +108,22 @@ function startOfDay_(d, tz) {
 function endOfDay_(d, tz) {
   const s = Utilities.formatDate(d, tz, 'yyyy-MM-dd');
   return new Date(`${s}T23:59:59`);
+}
+
+// 🔹 Explicitly shift Date object from UTC to target timezone
+function convertToTZ_(date, tz) {
+  const iso = Utilities.formatDate(date, tz, "yyyy-MM-dd'T'HH:mm:ss");
+  return new Date(iso);
+}
+
+function parseDateSafe_(v) {
+  try {
+    if (v instanceof Date && !isNaN(v)) return v;
+    const s = String(v || '').trim();
+    if (!s) return null;
+    const d = new Date(s);
+    return isNaN(d) ? null : d;
+  } catch (_) { return null; }
 }
 
 /* ---------- Helpers ---------- */
