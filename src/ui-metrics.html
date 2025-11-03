@@ -1,4 +1,4 @@
-<div class="card">
+<div class="card metrics-card">
   <div class="toolbar" style="justify-content:space-between;align-items:center;flex-wrap:wrap;">
     <button id="backFromMetrics" class="btn ghost">← Back</button>
     <h2 style="margin:0;">Form Metrics</h2>
@@ -6,290 +6,326 @@
 
   <p>Search and filter Pantry Orders using the options below.</p>
 
-  <div class="field-group" style="display:grid;gap:16px;margin-top:10px;">
-    <!-- Quick Date Buttons -->
-    <div class="field">
-      <label><strong>Date:</strong></label><br>
-      <div id="quickDates" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">
-        <button class="quick-btn" data-range="today">Today</button>
-        <button class="quick-btn" data-range="yesterday">Yesterday</button>
-        <button class="quick-btn" data-range="7">Last 7 Days</button>
-        <button class="quick-btn" data-range="30">Last 30 Days</button>
-        <button class="quick-btn" data-range="custom">Custom</button>
+  <!-- Filters -->
+  <div class="filters">
+    <!-- Date -->
+    <div class="filter-row">
+      <label class="filter-label">Date:</label>
+      <div id="quickDates" class="chips">
+        <button class="chip active" data-range="today">Today</button>
+        <button class="chip" data-range="yesterday">Yesterday</button>
+        <button class="chip" data-range="7">Last 7 Days</button>
+        <button class="chip" data-range="30">Last 30 Days</button>
+        <button class="chip" data-range="custom">Custom</button>
       </div>
     </div>
 
     <!-- Custom date range -->
-    <div id="customRange" style="display:none;gap:10px;align-items:center;">
+    <div id="customRange" class="custom-dates" style="display:none;">
       <input type="date" id="startDate" class="input-lg" />
       <span>–</span>
       <input type="date" id="endDate" class="input-lg" />
     </div>
 
-    <!-- Status Dropdown -->
-    <div class="field">
-      <label><strong>Status:</strong></label><br>
-      <div class="dropdown">
-        <button id="statusDropdown" class="btn secondary" type="button">Select Status ▾</button>
-        <div id="statusMenu" class="dropdown-menu">
-          <label><input type="checkbox" value="Any" checked> Any</label>
-          <label><input type="checkbox" value="Not Printed"> Not Printed</label>
-          <label><input type="checkbox" value="In Progress"> In Progress</label>
-          <label><input type="checkbox" value="Filled - Not Notified"> Filled - Not Notified</label>
-          <label><input type="checkbox" value="Awaiting Pick-up"> Awaiting Pick-up</label>
-          <label><input type="checkbox" value="Picked Up"> Picked Up</label>
-          <label><input type="checkbox" value="Expired"> Expired</label>
-          <label><input type="checkbox" value="Restocked"> Restocked</label>
-        </div>
+    <!-- Status -->
+    <div class="filter-row">
+      <label class="filter-label">Status:</label>
+      <div id="statusBar" class="chips wrap">
+        <button class="chip" data-status="Not Printed">Not Printed</button>
+        <button class="chip" data-status="In Progress">In Progress</button>
+        <button class="chip" data-status="Filled - Not Notified">Filled - Not Notified</button>
+        <button class="chip" data-status="Awaiting Pick-up">Awaiting Pick-up</button>
+        <button class="chip" data-status="Picked Up">Picked Up</button>
+        <button class="chip" data-status="Expired">Expired</button>
+        <button class="chip" data-status="Restocked">Restocked</button>
       </div>
     </div>
 
-    <div class="actions" style="margin-top:10px;">
+    <div class="actions">
       <button id="btnSearch" class="btn">Search</button>
       <button id="btnClear" class="btn secondary">Clear</button>
     </div>
   </div>
 
+  <!-- Spinner / messages -->
   <div id="msg" class="msg" style="display:none;margin-top:12px;"></div>
-  <div id="resultsContainer" style="display:none;margin-top:20px;"></div>
+
+  <!-- Results -->
+  <div id="resultsWrap" style="display:none;margin-top:16px;">
+    <div class="toolbar" style="justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <strong id="resultsCount">Results</strong>
+      <button id="btnPrint" class="btn secondary" disabled>Print Results</button>
+    </div>
+
+    <div class="table-scroll">
+      <table class="metrics-table">
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Date of Request</th>
+            <th>Form ID</th>
+            <th>Client Name</th>
+            <th>Phone</th>
+            <th>Printed</th>
+            <th>Fulfilled</th>
+            <th>Notified</th>
+            <th>Picked Up</th>
+            <th>Restocked</th>
+          </tr>
+        </thead>
+        <tbody id="resultsBody"></tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <style>
-  .input-lg {
-    padding:10px 12px;
-    border-radius:10px;
-    border:1px solid #cbd5e1;
-    font-size:16px;
-    flex:1;
-    min-width:160px;
-  }
-  .quick-btn {
-    background:#e2e8f0;
-    color:#0f172a;
-    border:none;
-    border-radius:8px;
-    padding:8px 14px;
-    cursor:pointer;
-    font-weight:600;
-    transition:all .15s ease;
-  }
-  .quick-btn:hover { background:var(--accent); color:#fff; }
-  .quick-btn.active { background:var(--accent); color:#fff; box-shadow:0 0 0 2px #0ea5e966 inset; }
+  /* Wider layout for desktop metrics */
+  .metrics-card { padding: 20px 22px; }
+  .app { width: min(1300px, 96vw) !important; }
 
-  .dropdown { position:relative; display:inline-block; }
-  .dropdown-menu {
-    display:none;
-    position:absolute;
-    background:#fff;
-    border:1px solid #cbd5e1;
-    border-radius:10px;
-    padding:10px;
-    box-shadow:0 4px 14px rgba(0,0,0,0.1);
-    z-index:10;
+  .filters { display:grid; gap:14px; }
+  .filter-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .filter-label { min-width:70px; font-weight:700; }
+
+  .chips { display:flex; gap:8px; }
+  .chips.wrap { flex-wrap:wrap; }
+  .chip {
+    background:#e2e8f0; color:#0f172a; border:none;
+    border-radius:999px; padding:8px 14px; cursor:pointer; font-weight:700;
+    box-shadow:0 2px 6px rgba(2,8,23,.06); transition:all .15s ease;
   }
-  .dropdown-menu label {
-    display:block;
-    padding:4px 6px;
-    font-size:16px;
-    cursor:pointer;
+  .chip:hover { background:var(--accent); color:#fff; }
+  .chip.active { background:var(--accent); color:#fff; box-shadow:0 0 0 2px #0ea5e96b inset; }
+
+  .custom-dates { display:flex; gap:10px; align-items:center; margin-left:80px; }
+  .input-lg {
+    padding:10px 12px; border-radius:10px; border:1px solid #cbd5e1;
+    font-size:16px; min-width:170px;
   }
-  .dropdown-menu input { margin-right:6px; }
-  .dropdown.show .dropdown-menu { display:block; }
+  .input-lg:focus { outline:none; box-shadow:0 0 0 2px var(--accent,#0ea5e9); }
 
   .spinner {
-    width:22px;height:22px;
-    border-radius:50%;
-    border:3px solid #e2e8f0;
-    border-top-color:var(--accent,#0ea5e9);
-    animation:spin 1s linear infinite;
-    display:inline-block;
-    vertical-align:middle;
-    margin-right:8px;
+    width:22px; height:22px; border-radius:50%;
+    border:3px solid #e2e8f0; border-top-color:var(--accent,#0ea5e9);
+    animation:spin 1s linear infinite; display:inline-block; vertical-align:middle; margin-right:8px;
   }
   @keyframes spin {to{transform:rotate(360deg)}}
 
-  .print-btn {
-    margin-top:16px;
-    padding:10px 16px;
-    background:var(--accent);
-    color:#fff;
-    border:none;
-    border-radius:10px;
-    cursor:pointer;
-    font-weight:600;
+  .table-scroll {
+    max-height: 360px;      /* ~10 rows visible */
+    overflow: auto;
+    border:1px solid #e2e8f0;
+    border-radius:12px;
+    background:#fff;
   }
-  .print-btn:hover { background:var(--accent-hover); }
+  .metrics-table {
+    width:100%;
+    border-collapse:separate;
+    border-spacing:0;
+  }
+  .metrics-table thead th {
+    position:sticky; top:0; z-index:1;
+    background:#eaf2f8;
+    text-align:left;
+    padding:10px 12px;
+    font-weight:800;
+    border-bottom:1px solid #dbe4ee;
+  }
+  .metrics-table tbody td {
+    padding:10px 12px;
+    border-bottom:1px solid #f1f5f9;
+    white-space:nowrap;
+    text-overflow:ellipsis;
+    overflow:hidden;
+  }
+  .metrics-table tbody tr:nth-child(odd) { background:#fafcff; }
+  .metrics-table tbody tr:nth-child(even) { background:#ffffff; }
+
+  /* Print: landscape, simple table */
+  @media print {
+    @page { size: landscape; margin: 10mm; }
+    body { background:#fff; }
+    .metrics-table thead th, .metrics-table tbody td { padding:6px 8px; }
+  }
 </style>
 
 <script>
 (function(){
-  const $ = s => document.querySelector(s);
+  const $  = s => document.querySelector(s);
   const $$ = s => [...document.querySelectorAll(s)];
-  const quickBtns = $$('#quickDates .quick-btn');
-  const customRange = $('#customRange');
-  const dropdown = $('.dropdown');
-  const dropdownBtn = $('#statusDropdown');
-  const msg = $('#msg');
-  const results = $('#resultsContainer');
-  let lastRows = [];
 
-  /* ===== Quick date logic ===== */
+  const msg = $('#msg');
+  const resultsWrap = $('#resultsWrap');
+  const resultsBody = $('#resultsBody');
+  const resultsCount = $('#resultsCount');
+  const btnSearch = $('#btnSearch');
+  const btnClear = $('#btnClear');
+  const btnPrint = $('#btnPrint');
+  const quickBtns = $$('#quickDates .chip');
+  const customBox = $('#customRange');
+
+  // --- Quick date chips ---
   quickBtns.forEach(btn=>{
-    btn.addEventListener('click',()=>{
+    btn.addEventListener('click', ()=>{
       quickBtns.forEach(b=>b.classList.remove('active'));
       btn.classList.add('active');
-      const val = btn.dataset.range;
-      customRange.style.display = (val==='custom') ? 'flex' : 'none';
+      const r = btn.dataset.range;
+      customBox.style.display = (r === 'custom') ? 'flex' : 'none';
     });
   });
 
-  /* ===== Dropdown logic ===== */
-  dropdownBtn.addEventListener('click',()=> dropdown.classList.toggle('show'));
-  document.addEventListener('click',e=>{
-    if(!dropdown.contains(e.target)) dropdown.classList.remove('show');
+  // Enter triggers search for custom date inputs
+  $('#startDate').addEventListener('keydown', e => { if (e.key === 'Enter') btnSearch.click(); });
+  $('#endDate').addEventListener('keydown', e => { if (e.key === 'Enter') btnSearch.click(); });
+
+  // --- Status chips (multi-select toggles) ---
+  $('#statusBar').addEventListener('click', (e)=>{
+    const chip = e.target.closest('.chip');
+    if (!chip) return;
+    chip.classList.toggle('active');
   });
 
-  function getSelectedStatuses(){
-    return $$('#statusMenu input:checked').map(cb=>cb.value);
+  // --- Helpers ---
+  function setBusy(isBusy, text){
+    if (isBusy) {
+      setMsg(`<span class="spinner"></span>${text || 'Working…'}`, '');
+    } else {
+      msg.innerHTML = '';
+      msg.style.display = 'none';
+    }
+  }
+  function setMsg(html, type){
+    msg.innerHTML = html || '';
+    msg.className = 'msg ' + (type || '');
+    msg.style.display = html ? 'block' : 'none';
+  }
+  function activeRange(){
+    const a = $('.chip[data-range].active');
+    return a ? a.dataset.range : '';
+  }
+  function selectedStatuses(){
+    const list = $$('#statusBar .chip.active').map(c => c.dataset.status);
+    return list; // empty = treated as Any
   }
 
-  /* ===== Search ===== */
-  $('#btnSearch').addEventListener('click',()=>{
-    const range = $('.quick-btn.active')?.dataset.range || '';
-    const statuses = getSelectedStatuses();
-    if(!range){ setMsg('Please choose a date range first.','error'); return; }
+  // --- Phone & date formatting on the client ---
+  const pad2 = n => String(n).padStart(2,'0');
+  function fmtDate(any){
+    if (!any) return '';
+    const d = (any instanceof Date) ? any : new Date(any);
+    if (isNaN(d)) return '';
+    return `${pad2(d.getMonth()+1)}/${pad2(d.getDate())}/${d.getFullYear()}`;
+  }
+  function fmtPhone(s){
+    const digits = String(s||'').replace(/\D/g,'').slice(0,10);
+    if (digits.length !== 10) return String(s||'');
+    return `${digits.slice(0,3)}-${digits.slice(3,6)}-${digits.slice(6)}`;
+    }
 
-    setBusy(true, `Searching for ${statuses.join(', ')} in range ${range}…`);
+  // --- Render table ---
+  function renderRows(rows){
+    resultsBody.innerHTML = rows.map(r=>{
+      return `<tr>
+        <td>${escapeHtml(r.status||'')}</td>
+        <td>${escapeHtml(fmtDate(r.requestDate||r.date||''))}</td>
+        <td>${escapeHtml(r.formId||'')}</td>
+        <td>${escapeHtml(r.clientName||'')}</td>
+        <td>${escapeHtml(fmtPhone(r.phone))}</td>
+        <td>${escapeHtml(fmtDate(r.printed))}</td>
+        <td>${escapeHtml(fmtDate(r.fulfilled))}</td>
+        <td>${escapeHtml(fmtDate(r.notified))}</td>
+        <td>${escapeHtml(fmtDate(r.pickedUp))}</td>
+        <td>${escapeHtml(fmtDate(r.restocked))}</td>
+      </tr>`;
+    }).join('');
+    resultsCount.textContent = `${rows.length} result${rows.length!==1?'s':''}`;
+    resultsWrap.style.display = 'block';
+    btnPrint.disabled = rows.length === 0;
+  }
+
+  // --- Search ---
+  btnSearch.addEventListener('click', ()=>{
+    const range = activeRange();
+    if (!range) { setMsg('Please select a date range.','error'); return; }
 
     const q = {
       range,
-      statuses,
       start: $('#startDate').value || '',
-      end: $('#endDate').value || ''
+      end: $('#endDate').value || '',
+      statuses: selectedStatuses(), // [] means Any on backend
     };
 
+    setBusy(true, `Searching…`);
     google.script.run
-      .withSuccessHandler(res => {
+      .withSuccessHandler(res=>{
         setBusy(false);
-        if (!res || !res.ok) { setMsg(res?.message || 'Search failed.','error'); return; }
-        const rows = Array.isArray(res.rows) ? res.rows : [];
-        if (!rows.length) { setMsg('No results found.','error'); results.style.display='none'; return; }
-        lastRows = rows;
-        renderResults(rows);
+        let rows = [];
+        if (res && res.ok && Array.isArray(res.rows)) rows = res.rows;
+        if (!rows.length) { setMsg('No results found.','error'); resultsWrap.style.display='none'; btnPrint.disabled = true; return; }
+        setMsg(`${rows.length} result${rows.length!==1?'s':''} found.`,'success');
+        renderRows(rows);
       })
-      .withFailureHandler(err => {
+      .withFailureHandler(err=>{
         setBusy(false);
-        setMsg('Search failed: ' + err.message,'error');
+        setMsg('Search failed: ' + (err && err.message ? err.message : 'Unknown error'), 'error');
       })
       .searchOrderMetrics(q);
   });
 
-  /* ===== Render Results ===== */
-  function renderResults(rows){
-    const html = `
-      <table style="width:100%;border-collapse:collapse;">
-        <thead>
-          <tr style="background:#eaf2f8;">
-            <th>Status</th><th>Date of Request</th><th>Form ID</th>
-            <th>Client Name</th><th>Phone</th>
-            <th>Printed</th><th>Fulfilled</th><th>Notified</th>
-            <th>Picked Up</th><th>Restocked</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rows.map((r,i)=>`
-            <tr style="background:${i%2?'#f8fafc':'#fff'};">
-              <td>${r.status||''}</td>
-              <td>${r.requestDate||''}</td>
-              <td>${r.formId||''}</td>
-              <td>${r.clientName||''}</td>
-              <td>${r.phone||''}</td>
-              <td>${r.printed||''}</td>
-              <td>${r.fulfilled||''}</td>
-              <td>${r.notified||''}</td>
-              <td>${r.pickedUp||''}</td>
-              <td>${r.restocked||''}</td>
-            </tr>`).join('')}
-        </tbody>
-      </table>
-      <button id="btnPrintResults" class="print-btn">🖨️ Print Results</button>
-    `;
-    results.innerHTML = html;
-    results.style.display='block';
-    setMsg(`${rows.length} result${rows.length>1?'s':''} found.`,'success');
-    $('#btnPrintResults').addEventListener('click',()=>printResults(rows));
-  }
-
-  /* ===== Print ===== */
-  function printResults(rows){
-    const printable = `
-      <!DOCTYPE html>
-      <html><head>
-        <meta charset="utf-8">
-        <title>Form Metrics Report</title>
-        <style>
-          body{font-family:system-ui,sans-serif;padding:24px;}
-          h2{margin-top:0;text-align:center;}
-          table{width:100%;border-collapse:collapse;}
-          th,td{border:1px solid #ccc;padding:6px 8px;font-size:14px;}
-          th{background:#f0f4f8;}
-          tr:nth-child(even){background:#fafafa;}
-        </style>
-      </head>
-      <body>
-        <h2>SPCA Pet Pantry — Form Metrics Report</h2>
-        <table>
-          <thead>
-            <tr>
-              <th>Status</th><th>Date of Request</th><th>Form ID</th>
-              <th>Client Name</th><th>Phone</th>
-              <th>Printed</th><th>Fulfilled</th><th>Notified</th>
-              <th>Picked Up</th><th>Restocked</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${rows.map(r=>`
-              <tr>
-                <td>${r.status||''}</td>
-                <td>${r.requestDate||''}</td>
-                <td>${r.formId||''}</td>
-                <td>${r.clientName||''}</td>
-                <td>${r.phone||''}</td>
-                <td>${r.printed||''}</td>
-                <td>${r.fulfilled||''}</td>
-                <td>${r.notified||''}</td>
-                <td>${r.pickedUp||''}</td>
-                <td>${r.restocked||''}</td>
-              </tr>`).join('')}
-          </tbody>
-        </table>
-        <script>window.onload=()=>window.print();<\/script>
-      </body></html>`;
-    const w = window.open('', '_blank');
-    w.document.write(printable);
-    w.document.close();
-  }
-
-  /* ===== Clear ===== */
-  $('#btnClear').addEventListener('click',()=>{
+  // --- Clear ---
+  btnClear.addEventListener('click', ()=>{
+    // reset quick dates to Today
     quickBtns.forEach(b=>b.classList.remove('active'));
-    $$('#statusMenu input').forEach(cb=>cb.checked=false);
-    $('#startDate').value=''; $('#endDate').value='';
-    customRange.style.display='none';
-    results.style.display='none';
-    setMsg('','');
+    quickBtns[0].classList.add('active');
+    customBox.style.display = 'none';
+    $('#startDate').value = '';
+    $('#endDate').value = '';
+    // clear statuses
+    $$('#statusBar .chip.active').forEach(c=>c.classList.remove('active'));
+    // clear results
+    resultsWrap.style.display = 'none';
+    resultsBody.innerHTML = '';
+    btnPrint.disabled = true;
+    setMsg('', '');
   });
 
-  $('#backFromMetrics').addEventListener('click',()=> showScreen('home'));
+  // --- Back ---
+  $('#backFromMetrics').addEventListener('click', ()=> showScreen('home'));
 
-  /* ===== Helpers ===== */
-  function setBusy(busy,text){
-    if(busy){ setMsg(`<span class="spinner"></span>${text||'Working…'}`,'info'); }
-    else { msg.innerHTML=''; msg.style.display='none'; }
-  }
-  function setMsg(html,type){
-    msg.innerHTML=html||''; msg.className='msg '+(type||'');
-    msg.style.display=html?'block':'none';
+  // --- Print ---
+  btnPrint.addEventListener('click', ()=>{
+    const tableHtml = `
+      <html>
+        <head>
+          <meta charset="utf-8">
+          <title>Form Metrics — Print</title>
+          <style>
+            @page { size: landscape; margin: 10mm; }
+            body { font:14px system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+            table { width:100%; border-collapse:collapse; }
+            thead th { background:#eaf2f8; text-align:left; padding:8px; border-bottom:1px solid #dbe4ee; }
+            tbody td { padding:8px; border-bottom:1px solid #f1f5f9; white-space:nowrap; }
+            tbody tr:nth-child(odd){ background:#fafcff; }
+          </style>
+        </head>
+        <body>
+          <h2 style="margin:0 0 8px;">Form Metrics</h2>
+          <table>
+            ${$('.metrics-table').innerHTML}
+          </table>
+          <script>setTimeout(()=>window.print(), 250);<\/script>
+        </body>
+      </html>`;
+    const w = window.open('', '_blank');
+    w.document.write(tableHtml);
+    w.document.close();
+  });
+
+  function escapeHtml(s){
+    const div=document.createElement('div');
+    div.innerText=String(s==null?'':s);
+    return div.innerHTML;
   }
 })();
 </script>
