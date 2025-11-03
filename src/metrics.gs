@@ -106,7 +106,6 @@ function endOfDay_(d, tz) {
   const s = Utilities.formatDate(d, tz, 'yyyy-MM-dd');
   return new Date(`${s}T23:59:59`);
 }
-}
 
 /* ---------- Helpers ---------- */
 
