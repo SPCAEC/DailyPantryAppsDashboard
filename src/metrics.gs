@@ -126,6 +126,62 @@ function parseDateSafe_(v) {
   } catch (_) { return null; }
 }
 
+/* --- Helper functions --- */
+
+function calcRange_(range, startInput, endInput, tz) {
+  const today = new Date();
+  const start = new Date();
+  const end = new Date();
+  switch (range) {
+    case 'today':
+      return { start: startOfDay_(today, tz), end: endOfDay_(today, tz) };
+    case 'yesterday':
+      const y = new Date(today);
+      y.setDate(today.getDate() - 1);
+      return { start: startOfDay_(y, tz), end: endOfDay_(y, tz) };
+    case '7':
+      const s7 = new Date(today);
+      s7.setDate(today.getDate() - 7);
+      return { start: startOfDay_(s7, tz), end: endOfDay_(today, tz) };
+    case '30':
+      const s30 = new Date(today);
+      s30.setDate(today.getDate() - 30);
+      return { start: startOfDay_(s30, tz), end: endOfDay_(today, tz) };
+    case 'custom':
+      const s = startInput ? startOfDay_(new Date(startInput), tz) : null;
+      const e = endInput ? endOfDay_(new Date(endInput), tz) : null;
+      if (!s || !e) throw new Error('Invalid custom date range.');
+      return { start: s, end: e };
+    default:
+      throw new Error('Invalid range.');
+  }
+}
+
+function startOfDay_(d, tz) {
+  const s = Utilities.formatDate(d, tz, 'yyyy-MM-dd');
+  return new Date(`${s}T00:00:00`);
+}
+function endOfDay_(d, tz) {
+  const s = Utilities.formatDate(d, tz, 'yyyy-MM-dd');
+  return new Date(`${s}T23:59:59`);
+}
+
+// 🔹 Explicitly shift Date object from UTC to target timezone
+function convertToTZ_(date, tz) {
+  const iso = Utilities.formatDate(date, tz, "yyyy-MM-dd'T'HH:mm:ss");
+  return new Date(iso);
+}
+
+function parseDateSafe_(v) {
+  try {
+    if (v instanceof Date && !isNaN(v)) return v;
+    const s = String(v || '').trim();
+    if (!s) return null;
+    const d = new Date(s);
+    return isNaN(d) ? null : d;
+  } catch (_) { return null; }
+}
+
 /* ---------- Helpers ---------- */
 
 function computeStatus_(r, map, ts) {
