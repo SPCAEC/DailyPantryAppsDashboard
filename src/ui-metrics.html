@@ -258,17 +258,47 @@
 
     setBusy(true, `Searching…`);
     google.script.run
-      .withSuccessHandler(res=>{
+      .withSuccessHandler(res => {
         setBusy(false);
+        console.log('🔍 Raw searchOrderMetrics result:', res);
+
+        // Normalize possible response shapes
         let rows = [];
-        if (res && res.ok && Array.isArray(res.rows)) rows = res.rows;
-        if (!rows.length) { setMsg('No results found.','error'); resultsWrap.style.display='none'; btnPrint.disabled = true; return; }
-        setMsg(`${rows.length} result${rows.length!==1?'s':''} found.`,'success');
+        if (!res) {
+          setMsg('No response from server.', 'error');
+          return;
+        }
+
+        if (Array.isArray(res.rows)) {
+          rows = res.rows;
+        } else if (Array.isArray(res)) {
+          rows = res;
+        } else if (res.rows && typeof res.rows === 'object') {
+          rows = Object.values(res.rows);
+        } else if (typeof res === 'object' && Object.keys(res).every(k => !isNaN(k))) {
+          rows = Object.values(res);
+        }
+
+        console.log('🧩 Normalized rows array:', rows);
+
+        if (!Array.isArray(rows) || rows.length === 0) {
+          setMsg('No results found.', 'error');
+          resultsWrap.style.display = 'none';
+          btnPrint.disabled = true;
+          return;
+        }
+
+        setMsg(`${rows.length} result${rows.length !== 1 ? 's' : ''} found.`, 'success');
         renderRows(rows);
       })
-      .withFailureHandler(err=>{
+      .withFailureHandler(err => {
         setBusy(false);
-        setMsg('Search failed: ' + (err && err.message ? err.message : 'Unknown error'), 'error');
+        setMsg(
+          'Search failed: ' +
+            (err && err.message ? err.message : 'Unknown error'),
+          'error'
+        );
+        console.error('❌ searchOrderMetrics failed:', err);
       })
       .searchOrderMetrics(q);
   });
@@ -328,4 +358,7 @@
     return div.innerHTML;
   }
 })();
+if (google.script.run.ping) {
+  google.script.run.withSuccessHandler(() => console.log('Metrics panel ready')).ping();
+}
 </script>
