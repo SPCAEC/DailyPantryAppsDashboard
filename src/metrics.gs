@@ -62,7 +62,17 @@ function searchOrderMetrics(q) {
     });
 
     Logger.log(`✅ searchOrderMetrics found ${out.length} rows.`);
-    return { ok: true, rows: out };
+    // Ensure values are JSON-safe and trimmed
+    const safeRows = out.map(r => {
+      const obj = {};
+      for (const [k, v] of Object.entries(r)) {
+        obj[k] = typeof v === 'string' ? v.slice(0, 500) : v; // prevent overly long text
+      }
+      return obj;
+    });
+
+    Logger.log(`✅ searchOrderMetrics returning ${safeRows.length} safe rows.`);
+    return JSON.parse(JSON.stringify({ ok: true, rows: safeRows })); // force serialization
 
   } catch (err) {
     Logger.log('❌ searchOrderMetrics failed: %s', err);
